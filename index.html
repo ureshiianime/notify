@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <link rel="icon" type="image/png" href="logo.png">
+    <link rel="apple-touch-icon" href="logo.png">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Ñotify">
+    <meta name="theme-color" content="#0f0f13">
+    <title>Ñotify</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Import Progress Banner -->
+        <div id="importProgressBanner" style="display: none; position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background: rgba(28,28,33,0.9); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 15px 25px; z-index: 2000; box-shadow: 0 15px 35px rgba(0,0,0,0.6); min-width: 300px; text-align: center;">
+            <div style="display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 8px;">
+                <i class="fa-solid fa-circle-notch fa-spin" style="color: var(--accent-color);"></i>
+                <h4 style="margin: 0; font-size: 14px; color: var(--text-primary);">Importando Playlist...</h4>
+            </div>
+            <p id="importProgressText" style="margin: 0 0 10px 0; font-size: 12px; color: var(--text-secondary);">Procesando 0 de X canciones</p>
+            <div style="width: 100%; background: rgba(255,255,255,0.1); border-radius: 4px; height: 4px; overflow: hidden;">
+                <div id="importProgressBar" style="height: 100%; background: var(--accent-color); width: 0%; transition: width 0.3s;"></div>
+            </div>
+        </div>
+
+        <!-- Header / Navigation -->
+        <header class="main-header">
+            <div class="header-top" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                <h2 id="mainTitle" style="margin-bottom: 0;">Buscar</h2>
+                <div style="position: relative; display: flex;">
+                    <button id="createNewPlaylistBtn" class="primary-btn" style="display: none; padding: 10px; font-size: 16px; width: 40px; height: 40px; justify-content: center; border-radius: 50%;"><i class="fa-solid fa-plus"></i></button>
+                    <!-- Dropdown -->
+                    <div id="createPlaylistDropdown" class="dropdown-menu" style="display: none; opacity: 0; position: absolute; top: calc(100% + 8px); right: 0; background: var(--bg-color-soft); border-radius: 12px; box-shadow: 0 15px 35px rgba(0,0,0,0.6); border: 1px solid rgba(255,255,255,0.05); z-index: 1000; min-width: 220px; overflow: hidden; backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); transition: opacity 0.2s, transform 0.2s; transform: translateY(-10px);">
+                        <div class="dropdown-item" id="btnDropdownNew" style="padding: 14px 16px; cursor: pointer; display: flex; align-items: center; gap: 12px; font-size: 14px; font-weight: 500; transition: background 0.2s;"><i class="fa-solid fa-folder-plus" style="width: 16px; color: var(--text-secondary);"></i> Nueva Playlist</div>
+                        <div class="dropdown-item" id="btnDropdownImport" style="padding: 14px 16px; cursor: pointer; display: flex; align-items: center; gap: 12px; font-size: 14px; font-weight: 500; transition: background 0.2s; border-top: 1px solid rgba(255,255,255,0.05);"><i class="fa-solid fa-file-import" style="width: 16px; color: var(--text-secondary);"></i> Importar desde .txt</div>
+                    </div>
+                </div>
+            </div>
+            <!-- Invisible File Picker -->
+            <input type="file" id="importTxtInput" accept=".txt" style="display: none;">
+        </header>
+
+        <!-- Home View -->
+        <div id="homeView" class="view-container" style="display: flex;">
+            <main class="main-content" id="homeContainer">
+                <div class="home-section">
+                    <h3>Tus Playlists</h3>
+                    <div class="horizontal-scroll" id="homeUserPlaylists">
+                        <!-- User playlists here -->
+                    </div>
+                </div>
+                
+                <div class="home-section">
+                    <h3>Para Ti</h3>
+                    <div class="horizontal-scroll" id="homeMixes">
+                        <div class="loading-spinner"><i class="fa-solid fa-circle-notch fa-spin"></i></div>
+                    </div>
+                </div>
+                
+                <div class="home-section">
+                    <h3>Música Aleatoria</h3>
+                    <div class="horizontal-scroll" id="homeRandom">
+                        <div class="loading-spinner"><i class="fa-solid fa-circle-notch fa-spin"></i></div>
+                    </div>
+                </div>
+            </main>
+        </div>
+
+        <!-- Search View -->
+        <div id="searchView" class="view-container" style="display: none;">
+            <div class="search-bar-container">
+                <div class="search-bar">
+                    <i class="fa-solid fa-search"></i>
+                    <input type="text" id="searchInput" placeholder="Buscar canciones, artistas..." autocomplete="off">
+                </div>
+            </div>
+            <main class="main-content" id="searchResults">
+                <div class="empty-state">
+                    <i class="fa-solid fa-music"></i>
+                    <p>Busca tus canciones favoritas para empezar</p>
+                </div>
+            </main>
+        </div>
+
+        <!-- Playlists View -->
+        <div id="playlistsView" class="view-container" style="display: none;">
+            <main class="main-content" id="playlistsContainer">
+                <div class="empty-state">
+                    <i class="fa-solid fa-list-music"></i>
+                    <p>No tienes playlists. Crea una para empezar.</p>
+                </div>
+            </main>
+        </div>
+        
+        <!-- Playlist Detail View -->
+        <div id="playlistDetailView" class="view-container" style="display: none;">
+            <div class="playlist-detail-topbar" style="padding: 10px 20px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; background: var(--bg-color); z-index: 10; transition: background-color 0.3s; min-height: 50px;">
+                <div style="display: flex; align-items: center; gap: 15px; flex: 1;">
+                    <button id="backToPlaylistsBtn" class="icon-btn"><i class="fa-solid fa-arrow-left"></i></button>
+                    <h3 id="stickyPlaylistTitle" style="font-size: 16px; font-weight: 700; margin: 0; opacity: 0; transition: opacity 0.3s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 55vw;">Playlist</h3>
+                </div>
+                <button id="stickyPlayBtn" class="primary-btn" style="width: 40px; height: 40px; border-radius: 50%; padding: 0; justify-content: center; font-size: 16px; opacity: 0; pointer-events: none; transform: translateY(10px); transition: opacity 0.3s, transform 0.3s;"><i class="fa-solid fa-play" style="margin-left: 2px;"></i></button>
+            </div>
+            <main class="main-content" id="playlistDetailMain" style="padding: 0 8px; padding-bottom: 100px; scroll-behavior: smooth;">
+                
+                <!-- Filter Bar -->
+                <div id="playlistFilterWrapper" style="padding: 0 10px 15px; height: 60px; box-sizing: border-box;">
+                    <div class="search-bar" style="background: rgba(255,255,255,0.08);">
+                        <i class="fa-solid fa-search"></i>
+                        <input type="text" id="playlistFilterInput" placeholder="Buscar en esta página" autocomplete="off">
+                    </div>
+                </div>
+
+                <!-- Hero Section -->
+                <div class="playlist-hero" style="display: flex; flex-direction: column; align-items: center; padding: 0 10px 20px;">
+                    <div id="detailPlaylistCover" style="width: 75vw; max-width: 280px; aspect-ratio: 1/1; margin-bottom: 24px; border-radius: 8px; box-shadow: 0 15px 35px rgba(0,0,0,0.5); overflow: hidden;">
+                    </div>
+                    <!-- Info & Controls -->
+                    <div style="width: 100%; text-align: left;">
+                        <h2 id="detailPlaylistTitleHero" style="font-size: 28px; font-weight: 800; margin-bottom: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Playlist</h2>
+                        <p id="detailPlaylistInfo" style="color: var(--text-secondary); font-size: 14px; margin-bottom: 20px;">0 canciones</p>
+                        
+                        <div id="playlistControlsRow" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
+                            <div style="display: flex; gap: 20px; align-items: center;">
+                                <button id="editPlaylistBtn" class="icon-btn" style="color: var(--text-secondary); font-size: 20px;"><i class="fa-solid fa-pen"></i></button>
+                                <button id="deletePlaylistBtn" class="icon-btn" style="color: var(--text-secondary); font-size: 20px;"><i class="fa-solid fa-trash"></i></button>
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 20px;">
+                                <button id="shufflePlaylistBtn" class="icon-btn" style="font-size: 22px; color: var(--text-secondary);"><i class="fa-solid fa-shuffle"></i></button>
+                                <button id="playAllPlaylistBtn" class="primary-btn" style="width: 60px; height: 60px; border-radius: 50%; padding: 0; justify-content: center; font-size: 24px; box-shadow: 0 8px 20px rgba(10, 132, 255, 0.4);"><i class="fa-solid fa-play" style="margin-left: 4px;"></i></button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="playlistSongsContainer">
+                    <div class="empty-state">
+                        <p>Esta playlist está vacía</p>
+                    </div>
+                </div>
+            </main>
+        </div>
+
+        <!-- Artist Detail View -->
+        <div id="artistDetailView" class="view-container" style="display: none;">
+            <div class="artist-detail-topbar" style="padding: 10px 20px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; background: var(--bg-color); z-index: 10; transition: background-color 0.3s; min-height: 50px;">
+                <div style="display: flex; align-items: center; gap: 15px; flex: 1;">
+                    <button id="backFromArtistBtn" class="icon-btn"><i class="fa-solid fa-arrow-left"></i></button>
+                    <h3 id="stickyArtistTitle" style="font-size: 16px; font-weight: 700; margin: 0; opacity: 0; transition: opacity 0.3s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 55vw;">Artista</h3>
+                </div>
+                <button id="stickyArtistPlayBtn" class="primary-btn" style="width: 40px; height: 40px; border-radius: 50%; padding: 0; justify-content: center; font-size: 16px; opacity: 0; pointer-events: none; transform: translateY(10px); transition: opacity 0.3s, transform 0.3s;"><i class="fa-solid fa-play" style="margin-left: 2px;"></i></button>
+            </div>
+            <main class="main-content" id="artistDetailMain" style="padding: 0 8px; padding-bottom: 100px; scroll-behavior: smooth;">
+                
+                <!-- Hero Section -->
+                <div class="artist-hero" style="display: flex; flex-direction: column; align-items: center; padding: 20px 10px 10px;">
+                    <div id="detailArtistCover" style="width: 180px; height: 180px; margin-bottom: 24px; border-radius: 50%; box-shadow: 0 15px 35px rgba(0,0,0,0.5); overflow: hidden;">
+                        <img id="artistHeroImage" src="" style="width:100%; height:100%; object-fit:cover;">
+                    </div>
+                    <!-- Info & Controls -->
+                    <div style="width: 100%; text-align: left;">
+                        <h2 id="detailArtistTitleHero" style="font-size: 32px; font-weight: 800; margin-bottom: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Artista</h2>
+                        <p id="detailArtistInfo" style="color: var(--text-secondary); font-size: 14px; margin-bottom: 20px;">0 oyentes mensuales</p>
+                        
+                        <div id="artistControlsRow" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px;">
+                            <div style="display: flex; gap: 20px; align-items: center;">
+                                <button id="playAllArtistBtn" class="primary-btn" style="width: 55px; height: 55px; border-radius: 50%; padding: 0; justify-content: center; font-size: 22px; box-shadow: 0 8px 20px rgba(0,0,0,0.3); transition: transform 0.2s;"><i class="fa-solid fa-play" style="margin-left: 4px;"></i></button>
+                                <button id="shuffleArtistBtn" class="icon-btn" style="font-size: 24px; color: var(--text-secondary);"><i class="fa-solid fa-shuffle"></i></button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div style="padding: 0 10px; margin-bottom:15px;">
+                    <h3 style="font-size: 20px; font-weight: 700;">Top canciones</h3>
+                </div>
+                <div id="artistSongsContainer">
+                    <!-- Populated via JS -->
+                </div>
+
+                <div style="padding: 10px 10px 15px; margin-top: 10px;">
+                    <h3 style="font-size: 20px; font-weight: 700;">Discografía</h3>
+                </div>
+                <div id="artistAlbumsContainer" class="playlists-grid" style="padding: 0 10px;">
+                    <!-- Populated via JS -->
+                </div>
+            </main>
+        </div>
+
+        <!-- Album Detail View -->
+        <div id="albumDetailView" class="view-container" style="display: none;">
+            <div class="album-detail-topbar" style="padding: 10px 20px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; background: var(--bg-color); z-index: 10; transition: background-color 0.3s; min-height: 50px;">
+                <div style="display: flex; align-items: center; gap: 15px; flex: 1;">
+                    <button id="backFromAlbumBtn" class="icon-btn"><i class="fa-solid fa-arrow-left"></i></button>
+                    <h3 id="stickyAlbumTitle" style="font-size: 16px; font-weight: 700; margin: 0; opacity: 0; transition: opacity 0.3s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 55vw;">Álbum</h3>
+                </div>
+                <button id="stickyAlbumPlayBtn" class="primary-btn" style="width: 40px; height: 40px; border-radius: 50%; padding: 0; justify-content: center; font-size: 16px; opacity: 0; pointer-events: none; transform: translateY(10px); transition: opacity 0.3s, transform 0.3s;"><i class="fa-solid fa-play" style="margin-left: 2px;"></i></button>
+            </div>
+            <main class="main-content" id="albumDetailMain" style="padding: 0 8px; padding-bottom: 100px; scroll-behavior: smooth;">
+                
+                <!-- Hero Section -->
+                <div class="album-hero" style="display: flex; flex-direction: column; align-items: center; padding: 0 10px 20px;">
+                    <div id="detailAlbumCover" style="width: 75vw; max-width: 280px; aspect-ratio: 1/1; margin-bottom: 24px; border-radius: 4px; box-shadow: 0 15px 35px rgba(0,0,0,0.5); overflow: hidden;">
+                        <img id="albumHeroImage" src="" style="width:100%; height:100%; object-fit:cover;">
+                    </div>
+                    <!-- Info & Controls -->
+                    <div style="width: 100%; text-align: left;">
+                        <h2 id="detailAlbumTitleHero" style="font-size: 28px; font-weight: 800; margin-bottom: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Álbum</h2>
+                        <p id="detailAlbumInfo" style="color: var(--text-secondary); font-size: 14px; margin-bottom: 20px;">0 canciones</p>
+                        
+                        <div id="albumControlsRow" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px;">
+                            <div style="display: flex; gap: 20px; align-items: center;">
+                                <button id="playAllAlbumBtn" class="primary-btn" style="width: 55px; height: 55px; border-radius: 50%; padding: 0; justify-content: center; font-size: 22px; box-shadow: 0 8px 20px rgba(0,0,0,0.3); transition: transform 0.2s;"><i class="fa-solid fa-play" style="margin-left: 4px;"></i></button>
+                                <button id="shuffleAlbumBtn" class="icon-btn" style="font-size: 24px; color: var(--text-secondary);"><i class="fa-solid fa-shuffle"></i></button>
+                                <button id="saveAlbumBtn" class="icon-btn" style="font-size: 24px; color: var(--text-secondary); padding: 0; width: 30px; height: 30px; border-radius: 50%; border: 2px solid var(--text-secondary); display:flex; justify-content:center; align-items:center;" title="Guardar álbum"><i class="fa-solid fa-plus" style="font-size: 16px;"></i></button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="albumSongsContainer">
+                    <div class="empty-state">
+                        <p>Cargando álbum...</p>
+                    </div>
+                </div>
+            </main>
+        </div>
+
+        <!-- Mini Player (Bottom Bar) -->
+        <div class="mini-player" id="miniPlayer" style="display: none;">
+            <div class="mini-progress" id="miniProgress"></div>
+            <div class="mini-player-info" id="openPlayerBtn">
+                <img src="" alt="Album Art" id="miniCover">
+                <div class="mini-text">
+                    <h4 id="miniTitle">Song Title</h4>
+                    <p id="miniArtist">Artist Name</p>
+                </div>
+            </div>
+            <div class="mini-controls">
+                <button class="control-btn" id="miniPlayPauseBtn"><i class="fa-solid fa-play"></i></button>
+            </div>
+        </div>
+
+        <!-- Full Screen Player Overlay -->
+        <div class="full-player" id="fullPlayer">
+            <button class="close-player-btn" id="closePlayerBtn"><i class="fa-solid fa-chevron-down"></i></button>
+            
+            <div class="player-cover-container">
+                <img src="" alt="Album Art" id="fullCover" class="paused">
+            </div>
+            
+            <div class="player-info">
+                <h2 id="fullTitle">Song Title</h2>
+                <p id="fullArtist">Artist Name</p>
+            </div>
+            
+            <div class="progress-container" id="progressContainer">
+                <div class="progress-bar" id="progressBar"></div>
+            </div>
+            
+            <div class="time-info">
+                <span id="currentTime">0:00</span>
+                <span id="durationTime">0:30</span>
+            </div>
+            
+            <div class="player-controls">
+                <button class="control-btn prev-next" id="prevBtn"><i class="fa-solid fa-backward-step"></i></button>
+                <button class="control-btn play-pause big" id="playPauseBtn"><i class="fa-solid fa-play"></i></button>
+                <button class="control-btn prev-next" id="nextBtn"><i class="fa-solid fa-forward-step"></i></button>
+            </div>
+        </div>
+        
+        <!-- Add to Playlist Modal -->
+        <div class="modal-overlay" id="addPlaylistModal" style="display: none;">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>Añadir a Playlist</h3>
+                    <button class="close-modal" id="closePlaylistModal"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+                <div class="modal-body" id="modalPlaylistList">
+                    <!-- Playlists rendered here -->
+                </div>
+                <div class="modal-footer">
+                    <button class="create-new-btn" id="createPlaylistBtnModal"><i class="fa-solid fa-plus"></i> Nueva Playlist</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Create New Playlist / Import Modal -->
+        <div class="modal-overlay" id="createPlaylistModal" style="display: none;">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3 id="createPlaylistModalTitle">Nueva Playlist</h3>
+                    <button class="close-modal" id="closeCreatePlaylistModal"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+                <div class="modal-body">
+                    <input type="text" id="newPlaylistNameInput" class="custom-input" placeholder="Nombre de tu playlist" autocomplete="off" style="margin-bottom: 10px;">
+                    
+                    <!-- Hidden Import Dropzone -->
+                    <div id="importFileContainer" style="display: none; background: rgba(255,255,255,0.05); border: 2px dashed rgba(255,255,255,0.2); border-radius: 8px; padding: 20px; text-align: center; cursor: pointer; transition: all 0.2s;">
+                         <i class="fa-solid fa-file-arrow-up" style="font-size: 24px; color: var(--text-secondary); margin-bottom: 10px;"></i>
+                         <p style="margin: 0; font-size: 14px; color: var(--text-primary);">Haz clic para subir archivo .txt</p>
+                         <p id="selectedFileNameDisplay" style="margin: 5px 0 0; font-size: 12px; color: var(--accent-color); font-weight: 500;"></p>
+                    </div>
+                </div>
+                <div class="modal-footer" style="display: flex; gap: 10px; border-top: none; padding-top: 5px;">
+                    <button class="primary-btn" id="cancelCreatePlaylistBtn" style="flex: 1; background: rgba(255,255,255,0.1); justify-content: center;">Cancelar</button>
+                    <button class="primary-btn" id="confirmCreatePlaylistBtn" style="flex: 1; justify-content: center;">Crear</button>
+                </div>
+            </div>
+        </div>
+        <!-- Edit Playlist Modal -->
+        <div class="modal-overlay" id="editPlaylistModal" style="display: none;">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>Renombrar Playlist</h3>
+                    <button class="close-modal" id="closeEditPlaylistModal"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+                <div class="modal-body">
+                    <input type="text" id="editPlaylistNameInput" class="custom-input" placeholder="Nuevo nombre" autocomplete="off">
+                </div>
+                <div class="modal-footer" style="display: flex; gap: 10px; border-top: none; padding-top: 5px;">
+                    <button class="primary-btn" id="cancelEditPlaylistBtn" style="flex: 1; background: rgba(255,255,255,0.1); justify-content: center;">Cancelar</button>
+                    <button class="primary-btn" id="confirmEditPlaylistBtn" style="flex: 1; justify-content: center;">Guardar</button>
+                </div>
+            </div>
+        </div>
+        <!-- Delete Playlist Confirm Modal -->
+        <div class="modal-overlay" id="deleteConfirmModal" style="display: none;">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>Eliminar Playlist</h3>
+                    <button class="close-modal" id="closeDeleteConfirmModal"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+                <div class="modal-body">
+                    <p style="color: var(--text-secondary); line-height: 1.5;">¿Estás seguro de que quieres eliminar esta playlist? Esta acción no se puede deshacer.</p>
+                </div>
+                <div class="modal-footer" style="display: flex; gap: 10px; border-top: none; padding-top: 10px;">
+                    <button class="primary-btn" id="cancelDeleteBtn" style="flex: 1; background: rgba(255,255,255,0.1); justify-content: center;">Cancelar</button>
+                    <button class="primary-btn" id="confirmDeleteBtn" style="flex: 1; justify-content: center; background: #ff453a;">Eliminar</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- TXT Import Results Modal -->
+        <div class="modal-overlay" id="importResultsModal" style="display: none;">
+            <div class="modal-content" style="max-height: 80vh; display: flex; flex-direction: column; width: 90%; max-width: 500px;">
+                <div class="modal-header">
+                    <h3 style="display: flex; align-items: center; gap: 8px;"><i class="fa-solid fa-file-circle-check" style="color: var(--accent-color);"></i> Reporte de Importación</h3>
+                    <button class="close-modal" id="closeImportResultsModal"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+                <div class="modal-body" style="overflow-y: auto; padding-right: 5px;">
+                    <p style="color: var(--text-secondary); line-height: 1.5; margin-bottom: 15px; font-size: 13px;">Las siguientes canciones importadas no se pudieron completar con calidad premium o faltan en el catálogo global:</p>
+                    <div id="importResultsList" style="display: flex; flex-direction: column; gap: 10px;">
+                        <!-- Results injected here -->
+                    </div>
+                </div>
+                <div class="modal-footer" style="padding-top: 15px;">
+                    <button class="primary-btn" id="finishImportBtn" style="width: 100%; justify-content: center;">Entendido</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Toast Notifications -->
+        <div id="toastContainer" class="toast-container"></div>
+        
+        <!-- Bottom Navigation -->
+        <nav class="bottom-nav" id="bottomNav">
+            <div class="nav-item active" id="tabHome">
+                <i class="fa-solid fa-house"></i>
+                <span>Inicio</span>
+            </div>
+            <div class="nav-item" id="tabSearch">
+                <i class="fa-solid fa-magnifying-glass"></i>
+                <span>Buscar</span>
+            </div>
+            <div class="nav-item" id="tabPlaylists">
+                <i class="fa-solid fa-book-open"></i>
+                <span>Tu Biblioteca</span>
+            </div>
+        </nav>
+    </div>
+    
+    <audio id="audioPlayer"></audio>
+    <script src="script.js"></script>
+</body>
+</html>

@@ -1,0 +1,60 @@
+{
+  "id": "_hgAlixy",
+  "name": "Bad Bunny",
+  "type": "",
+  "album": {
+    "id": "41848264",
+    "name": "All Set",
+    "url": "https://www.jiosaavn.com/album/all-set/rylmCx,qFZI_"
+  },
+  "year": "2023",
+  "releaseDate": null,
+  "duration": "174",
+  "label": "C Town Production",
+  "primaryArtists": "Bunny Johal, Honey Dhillon",
+  "primaryArtistsId": "6970483, 8480733",
+  "featuredArtists": "Khushi Pandher",
+  "featuredArtistsId": "8628437",
+  "explicitContent": 0,
+  "playCount": "3807",
+  "language": "punjabi",
+  "hasLyrics": "false",
+  "url": "https://www.jiosaavn.com/song/bad-bunny/LwAMcBhZT0o",
+  "copyright": "℗ 2023 C Town Production",
+  "image": [
+    {
+      "quality": "50x50",
+      "link": "https://c.saavncdn.com/585/All-Set-Punjabi-2023-20230120134709-50x50.jpg"
+    },
+    {
+      "quality": "150x150",
+      "link": "https://c.saavncdn.com/585/All-Set-Punjabi-2023-20230120134709-150x150.jpg"
+    },
+    {
+      "quality": "500x500",
+      "link": "https://c.saavncdn.com/585/All-Set-Punjabi-2023-20230120134709-500x500.jpg"
+    }
+  ],
+  "downloadUrl": [
+    {
+      "quality": "12kbps",
+      "link": "https://aac.saavncdn.com/585/f01b67a688c2679b6a46b9e8b047cdfc_12.mp4"
+    },
+    {
+      "quality": "48kbps",
+      "link": "https://aac.saavncdn.com/585/f01b67a688c2679b6a46b9e8b047cdfc_48.mp4"
+    },
+    {
+      "quality": "96kbps",
+      "link": "https://aac.saavncdn.com/585/f01b67a688c2679b6a46b9e8b047cdfc_96.mp4"
+    },
+    {
+      "quality": "160kbps",
+      "link": "https://aac.saavncdn.com/585/f01b67a688c2679b6a46b9e8b047cdfc_160.mp4"
+    },
+    {
+      "quality": "320kbps",
+      "link": "https://aac.saavncdn.com/585/f01b67a688c2679b6a46b9e8b047cdfc_320.mp4"
+    }
+  ]
+}
