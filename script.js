@@ -2123,7 +2123,7 @@ audioPlayer.addEventListener('timeupdate', () => {
         currentTimeEl.textContent = formatTime(current);
     }
     
-    if (Math.abs(current - lastSaveTime) > 5) {
+    if (Math.abs(current - lastSaveTime) > 2) {
         savePlaybackState();
         lastSaveTime = current;
     }
@@ -2134,7 +2134,15 @@ audioPlayer.addEventListener('play', () => {
     updateMediaSessionPosition();
 });
 
+// Save playback state when page is closed/hidden (critical for mobile)
+window.addEventListener('pagehide', () => savePlaybackState());
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') savePlaybackState();
+});
+window.addEventListener('beforeunload', () => savePlaybackState());
+
 audioPlayer.addEventListener('pause', () => {
+    savePlaybackState();
     updateMediaSessionPosition();
 });
 
