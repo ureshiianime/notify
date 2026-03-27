@@ -2133,7 +2133,8 @@ function savePlaybackState() {
     localStorage.setItem('webMusicPlayerState', JSON.stringify(state));
 }
 
-let lastSaveTime = 0;
+// Wall-clock throttle: save at most every 5 real seconds while playing
+let _lastSaveWallTime = 0;
 audioPlayer.addEventListener('timeupdate', () => {
     const current = audioPlayer.currentTime;
     const duration = audioPlayer.duration;
@@ -2143,10 +2144,11 @@ audioPlayer.addEventListener('timeupdate', () => {
         miniProgress.style.width = `${percent}%`;
         currentTimeEl.textContent = formatTime(current);
     }
-    
-    if (Math.abs(current - lastSaveTime) > 2) {
+
+    const now = Date.now();
+    if (now - _lastSaveWallTime >= 5000) {
         savePlaybackState();
-        lastSaveTime = current;
+        _lastSaveWallTime = now;
     }
     updateMediaSessionPosition();
 });
