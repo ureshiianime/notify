@@ -2055,6 +2055,7 @@ function togglePlay() {
     if (!audioPlayer.src || currentIndex === -1) return;
     
     if (audioPlayer.paused) {
+        stopKeepAlive(); // Stop silent loop before playing real audio
         // If there's a pending resume time (page just loaded), seek before playing
         const pending = audioPlayer._pendingResumeTime || 0;
         audioPlayer.play().then(() => {
@@ -2068,6 +2069,8 @@ function togglePlay() {
             console.error("Play failed", e);
         });
     } else {
+        // Start keepalive HERE (inside user gesture) before pausing
+        startKeepAlive();
         audioPlayer.pause();
         updatePlayState(false);
     }
@@ -2149,35 +2152,29 @@ audioPlayer.addEventListener('timeupdate', () => {
 });
 
 // --- iOS Audio Session Keepalive ---
-// iOS Safari kills the audio session after ~60s of pause.
-// We keep it alive by playing a silent buffer every 25s (up to 5 minutes).
-let _keepAliveCtx = null;
-let _keepAliveInterval = null;
-let _keepAliveStart = 0;
+// iOS suspends AudioContext when backgrounded, so we use a second <audio> element
+// looping a tiny silent WAV. iOS Safari keeps the audio session alive only when
+// an <audio> element is actually playing. Must be started inside a user gesture.
+const _silentAudio = new Audio();
+_silentAudio.loop = true;
+// Minimal valid silent WAV (1 sample, 8kHz mono, 8-bit PCM)
+_silentAudio.src = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAgD4AAAB9AAACABAA' +
+    'ZGF0YQAAAAA=';
+_silentAudio.volume = 0.001;
+
+let _keepAliveTimer = null;
 const KEEPALIVE_LIMIT_MS = 5 * 60 * 1000; // 5 minutes
 
 function startKeepAlive() {
     stopKeepAlive();
-    _keepAliveStart = Date.now();
-    try {
-        if (!_keepAliveCtx) _keepAliveCtx = new (window.AudioContext || window.webkitAudioContext)();
-        _keepAliveInterval = setInterval(() => {
-            if (Date.now() - _keepAliveStart >= KEEPALIVE_LIMIT_MS) {
-                stopKeepAlive();
-                return;
-            }
-            // Play a 0.1s silent buffer to keep the audio session registered
-            const buf = _keepAliveCtx.createBuffer(1, _keepAliveCtx.sampleRate * 0.1, _keepAliveCtx.sampleRate);
-            const src = _keepAliveCtx.createBufferSource();
-            src.buffer = buf;
-            src.connect(_keepAliveCtx.destination);
-            src.start();
-        }, 25000);
-    } catch(e) {}
+    _silentAudio.play().catch(() => {});
+    _keepAliveTimer = setTimeout(stopKeepAlive, KEEPALIVE_LIMIT_MS);
 }
 
 function stopKeepAlive() {
-    if (_keepAliveInterval) { clearInterval(_keepAliveInterval); _keepAliveInterval = null; }
+    _silentAudio.pause();
+    _silentAudio.currentTime = 0;
+    if (_keepAliveTimer) { clearTimeout(_keepAliveTimer); _keepAliveTimer = null; }
 }
 
 audioPlayer.addEventListener('play', () => {
@@ -2194,7 +2191,8 @@ document.addEventListener('visibilitychange', () => {
 window.addEventListener('beforeunload', () => savePlaybackState());
 
 audioPlayer.addEventListener('pause', () => {
-    startKeepAlive(); // Keep session alive for up to 5 min
+    // Note: keepalive is started in togglePlay() directly (user gesture)
+    // This handles pauses from other sources (e.g. Media Session handler)
     if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused';
     savePlaybackState();
     updateMediaSessionPosition();
@@ -2260,6 +2258,7 @@ function setupMediaSession(title, artist, album, smallArtwork, largeArtwork) {
         });
         
         navigator.mediaSession.setActionHandler('pause', () => {
+            startKeepAlive(); // Lock screen pause also needs keepalive
             audioPlayer.pause();
             navigator.mediaSession.playbackState = 'paused';
             updatePlayState(false);
