@@ -1977,8 +1977,8 @@ async function playTrack(index, queueArray = null, autoPlay = true, resumeTime =
     audioPlayer.src = audioUrl;
     
     if (autoPlay) {
-        if (resumeTime > 0) audioPlayer.currentTime = resumeTime;
         audioPlayer.play().then(() => {
+            if (resumeTime > 0) audioPlayer.currentTime = resumeTime;
             updatePlayState(true);
             setupMediaSession(trackName, artistName, (track.album && track.album.name) || 'Sencillo', smallArtworkUrl, highQualityArtwork);
         }).catch(e => {
@@ -1989,10 +1989,21 @@ async function playTrack(index, queueArray = null, autoPlay = true, resumeTime =
         updatePlayState(false);
         setupMediaSession(trackName, artistName, (track.album && track.album.name) || 'Sencillo', smallArtworkUrl, highQualityArtwork);
         if (resumeTime > 0) {
-            audioPlayer.addEventListener('loadedmetadata', () => {
-                audioPlayer.currentTime = resumeTime;
-                currentTimeEl.textContent = formatTime(resumeTime);
-            }, { once: true });
+            // Use canplay for streaming URLs; it fires reliably once audio is ready to seek
+            const restoreTime = () => {
+                if (audioPlayer.readyState >= 2) {
+                    audioPlayer.currentTime = resumeTime;
+                    currentTimeEl.textContent = formatTime(resumeTime);
+                    updateMediaSessionPosition();
+                } else {
+                    audioPlayer.addEventListener('canplay', () => {
+                        audioPlayer.currentTime = resumeTime;
+                        currentTimeEl.textContent = formatTime(resumeTime);
+                        updateMediaSessionPosition();
+                    }, { once: true });
+                }
+            };
+            restoreTime();
         }
     }
 }
@@ -2131,6 +2142,7 @@ audioPlayer.addEventListener('timeupdate', () => {
 });
 
 audioPlayer.addEventListener('play', () => {
+    if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing';
     updateMediaSessionPosition();
 });
 
@@ -2142,11 +2154,13 @@ document.addEventListener('visibilitychange', () => {
 window.addEventListener('beforeunload', () => savePlaybackState());
 
 audioPlayer.addEventListener('pause', () => {
+    if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused';
     savePlaybackState();
     updateMediaSessionPosition();
 });
 
 audioPlayer.addEventListener('seeked', () => {
+    savePlaybackState();
     updateMediaSessionPosition();
 });
 
@@ -2173,6 +2187,7 @@ progressContainer.addEventListener('click', (e) => {
     const rect = progressContainer.getBoundingClientRect();
     const percent = (e.clientX - rect.left) / rect.width;
     audioPlayer.currentTime = percent * audioPlayer.duration;
+    updateMediaSessionPosition();
 });
 
 window.addEventListener('resize', () => {
@@ -2196,13 +2211,18 @@ function setupMediaSession(title, artist, album, smallArtwork, largeArtwork) {
         });
 
         navigator.mediaSession.setActionHandler('play', () => {
-            audioPlayer.play();
-            updatePlayState(true);
+            audioPlayer.play().then(() => {
+                navigator.mediaSession.playbackState = 'playing';
+                updatePlayState(true);
+                updateMediaSessionPosition();
+            }).catch(() => {});
         });
         
         navigator.mediaSession.setActionHandler('pause', () => {
             audioPlayer.pause();
+            navigator.mediaSession.playbackState = 'paused';
             updatePlayState(false);
+            updateMediaSessionPosition();
         });
         
         navigator.mediaSession.setActionHandler('previoustrack', playPrev);
