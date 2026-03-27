@@ -176,6 +176,18 @@ function savePlaylists() {
     localStorage.setItem('webMusicPlaylists', JSON.stringify(playlists));
 }
 
+// Builds individual clickable links for each artist in a comma-separated string
+function buildArtistHtml(artistName, artistIdsStr) {
+    const names = artistName.split(',').map(n => n.trim()).filter(Boolean);
+    const ids   = (artistIdsStr || '').split(',').map(id => id.trim()).filter(Boolean);
+    if (ids.length === 0) return `<p>${artistName}</p>`;
+    const parts = names.map((name, i) => {
+        const id = ids[i] || ids[0]; // fallback to first id if not enough ids
+        return `<span class="artist-link" data-artist-id="${id}" style="cursor:pointer;">${name}</span>`;
+    });
+    return `<p>${parts.join(', ')}</p>`;
+}
+
 // --- Toast Notifications ---
 function showToast(message, icon = "fa-check-circle") {
     const toast = document.createElement('div');
@@ -389,11 +401,10 @@ function renderPlaylistSongs(tracksToRender) {
         const artistName = decodeHTML(track.primaryArtists || track.singers || "Artista Desconocido");
         const trackName = decodeHTML(track.name || track.title);
         
-        const artistId = (track.primaryArtistsId || '').split(',')[0].trim() || (track.artistId || '').split(',')[0].trim();
-        let artistHtml = `<p>${artistName}</p>`;
-        if (artistId) {
-            artistHtml = `<p><span class="artist-link" data-artist-id="${artistId}" style="cursor: pointer;">${artistName}</span></p>`;
-        }
+        const artistHtml = buildArtistHtml(
+            decodeHTML(track.primaryArtists || track.singers || 'Artista Desconocido'),
+            track.primaryArtistsId || track.artistId || ''
+        );
         
         const item = document.createElement('div');
         item.className = 'song-item';
@@ -1269,11 +1280,10 @@ function appendResults(newTracks, startIndex) {
         
         const tagHtml = track.isPreview ? `<span class="preview-tag" style="background: rgba(255,0,0,0.2); color: #ff6b6b; padding: 2px 6px; border-radius: 4px; font-size: 10px; margin-left: 8px; vertical-align: middle; white-space: nowrap;">Solo Preview</span>` : '';
         
-        const artistId = (track.primaryArtistsId || '').split(',')[0].trim() || (track.artistId || '').split(',')[0].trim();
-        let artistHtml = `<p>${artistName}</p>`;
-        if (artistId) {
-            artistHtml = `<p><span class="artist-link" data-artist-id="${artistId}" style="cursor: pointer;">${artistName}</span></p>`;
-        }
+        const artistHtml = buildArtistHtml(
+            decodeHTML(track.primaryArtists || track.singers || 'Artista Desconocido'),
+            track.primaryArtistsId || track.artistId || ''
+        );
         
         const item = document.createElement('div');
         item.className = 'song-item';
@@ -1586,11 +1596,10 @@ function renderArtistSongs() {
         const artistName = decodeHTML(track.primaryArtists || track.singers || "Artista Desconocido");
         const trackName = decodeHTML(track.name || track.title);
         
-        const artistId = (track.primaryArtistsId || '').split(',')[0].trim() || (track.artistId || '').split(',')[0].trim();
-        let artistHtml = `<p>${artistName}</p>`;
-        if (artistId) {
-            artistHtml = `<p><span class="artist-link" data-artist-id="${artistId}" style="cursor: pointer;">${artistName}</span></p>`;
-        }
+        const artistHtml = buildArtistHtml(
+            decodeHTML(track.primaryArtists || track.singers || 'Artista Desconocido'),
+            track.primaryArtistsId || track.artistId || ''
+        );
         
         const item = document.createElement('div');
         item.className = 'song-item';
@@ -1752,11 +1761,10 @@ function renderAlbumSongs() {
         const artistName = decodeHTML(track.primaryArtists || track.singers || "Artista Desconocido");
         const trackName = decodeHTML(track.name || track.title);
         
-        const artistId = (track.primaryArtistsId || '').split(',')[0].trim() || (track.artistId || '').split(',')[0].trim();
-        let artistHtml = `<p>${artistName}</p>`;
-        if (artistId) {
-            artistHtml = `<p><span class="artist-link" data-artist-id="${artistId}" style="cursor: pointer;">${artistName}</span></p>`;
-        }
+        const artistHtml = buildArtistHtml(
+            decodeHTML(track.primaryArtists || track.singers || 'Artista Desconocido'),
+            track.primaryArtistsId || track.artistId || ''
+        );
         
         const item = document.createElement('div');
         item.className = 'song-item';
