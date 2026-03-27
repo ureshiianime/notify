@@ -1988,22 +1988,19 @@ async function playTrack(index, queueArray = null, autoPlay = true, resumeTime =
     } else {
         updatePlayState(false);
         setupMediaSession(trackName, artistName, (track.album && track.album.name) || 'Sencillo', smallArtworkUrl, highQualityArtwork);
+        // Immediately show saved position in UI — no waiting for audio to load
         if (resumeTime > 0) {
-            // Use canplay for streaming URLs; it fires reliably once audio is ready to seek
-            const restoreTime = () => {
-                if (audioPlayer.readyState >= 2) {
-                    audioPlayer.currentTime = resumeTime;
-                    currentTimeEl.textContent = formatTime(resumeTime);
+            currentTimeEl.textContent = formatTime(resumeTime);
+            // Store so togglePlay can seek to it when user presses play
+            audioPlayer._pendingResumeTime = resumeTime;
+            // Also try to apply it once canplay fires (if iOS allows preloading)
+            audioPlayer.addEventListener('canplay', () => {
+                if (audioPlayer._pendingResumeTime > 0) {
+                    audioPlayer.currentTime = audioPlayer._pendingResumeTime;
+                    audioPlayer._pendingResumeTime = 0;
                     updateMediaSessionPosition();
-                } else {
-                    audioPlayer.addEventListener('canplay', () => {
-                        audioPlayer.currentTime = resumeTime;
-                        currentTimeEl.textContent = formatTime(resumeTime);
-                        updateMediaSessionPosition();
-                    }, { once: true });
                 }
-            };
-            restoreTime();
+            }, { once: true });
         }
     }
 }
@@ -2058,8 +2055,18 @@ function togglePlay() {
     if (!audioPlayer.src || currentIndex === -1) return;
     
     if (audioPlayer.paused) {
-        audioPlayer.play();
-        updatePlayState(true);
+        // If there's a pending resume time (page just loaded), seek before playing
+        const pending = audioPlayer._pendingResumeTime || 0;
+        audioPlayer.play().then(() => {
+            if (pending > 0) {
+                audioPlayer.currentTime = pending;
+                audioPlayer._pendingResumeTime = 0;
+                updateMediaSessionPosition();
+            }
+            updatePlayState(true);
+        }).catch(e => {
+            console.error("Play failed", e);
+        });
     } else {
         audioPlayer.pause();
         updatePlayState(false);
@@ -2141,7 +2148,40 @@ audioPlayer.addEventListener('timeupdate', () => {
     updateMediaSessionPosition();
 });
 
+// --- iOS Audio Session Keepalive ---
+// iOS Safari kills the audio session after ~60s of pause.
+// We keep it alive by playing a silent buffer every 25s (up to 5 minutes).
+let _keepAliveCtx = null;
+let _keepAliveInterval = null;
+let _keepAliveStart = 0;
+const KEEPALIVE_LIMIT_MS = 5 * 60 * 1000; // 5 minutes
+
+function startKeepAlive() {
+    stopKeepAlive();
+    _keepAliveStart = Date.now();
+    try {
+        if (!_keepAliveCtx) _keepAliveCtx = new (window.AudioContext || window.webkitAudioContext)();
+        _keepAliveInterval = setInterval(() => {
+            if (Date.now() - _keepAliveStart >= KEEPALIVE_LIMIT_MS) {
+                stopKeepAlive();
+                return;
+            }
+            // Play a 0.1s silent buffer to keep the audio session registered
+            const buf = _keepAliveCtx.createBuffer(1, _keepAliveCtx.sampleRate * 0.1, _keepAliveCtx.sampleRate);
+            const src = _keepAliveCtx.createBufferSource();
+            src.buffer = buf;
+            src.connect(_keepAliveCtx.destination);
+            src.start();
+        }, 25000);
+    } catch(e) {}
+}
+
+function stopKeepAlive() {
+    if (_keepAliveInterval) { clearInterval(_keepAliveInterval); _keepAliveInterval = null; }
+}
+
 audioPlayer.addEventListener('play', () => {
+    stopKeepAlive(); // No need while playing
     if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing';
     updateMediaSessionPosition();
 });
@@ -2154,6 +2194,7 @@ document.addEventListener('visibilitychange', () => {
 window.addEventListener('beforeunload', () => savePlaybackState());
 
 audioPlayer.addEventListener('pause', () => {
+    startKeepAlive(); // Keep session alive for up to 5 min
     if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused';
     savePlaybackState();
     updateMediaSessionPosition();
