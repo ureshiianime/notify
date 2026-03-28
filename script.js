@@ -1099,22 +1099,56 @@ function renderModalPlaylists() {
     playlists.forEach(playlist => {
         const item = document.createElement('div');
         item.className = 'modal-playlist-item';
-        const trackExists = playlist.tracks.find(t => t.id === trackToAdd.id);
+        
+        const trackIndex = playlist.tracks.findIndex(t => t.id === trackToAdd.id);
+        const trackExists = trackIndex !== -1;
+        
+        const coverHTML = generatePlaylistCoverHTML(playlist, false);
+        const subtitle = trackExists 
+            ? 'La canción ya está en la playlist.' 
+            : `${playlist.tracks.length} cancion${playlist.tracks.length !== 1 ? 'es' : ''}`;
+            
+        const subtitleColor = trackExists ? 'var(--text-secondary)' : 'var(--text-secondary)';
         
         item.innerHTML = `
-            <i class="fa-solid ${trackExists ? 'fa-check' : 'fa-list'}"></i>
-            <span style="flex:1;">${playlist.name}</span>
-            <span style="color:var(--text-secondary); font-size:12px;">${playlist.tracks.length}</span>
+            ${coverHTML}
+            <div style="flex:1; display:flex; flex-direction:column; justify-content:center; margin-left: 12px;">
+                <span style="font-size: 16px; font-weight: 500; margin-bottom: 2px;">${playlist.name}</span>
+                <span style="color:${subtitleColor}; font-size:13px;">${subtitle}</span>
+            </div>
+            ${trackExists ? '<i class="fa-solid fa-check" style="color: var(--accent-color); font-size: 18px; margin-right: 0;"></i>' : ''}
         `;
         
-        if (!trackExists) {
-            item.addEventListener('click', () => {
+        item.addEventListener('click', () => {
+            if (trackExists) {
+                playlist.tracks.splice(trackIndex, 1);
+                savePlaylists();
+                
+                // Si la playlist actual que se está viendo es esta, la actualizamos
+                if (currentViewedPlaylist && currentViewedPlaylist.id === playlist.id) {
+                    updatePlaylistInfoDisplay(currentViewedPlaylist);
+                    detailPlaylistCover.innerHTML = generatePlaylistCoverHTML(currentViewedPlaylist, true);
+                    renderPlaylistSongs(currentViewedPlaylist.tracks);
+                }
+                renderHomePlaylists();
+                
+                showToast(`Canción eliminada de ${playlist.name}`);
+            } else {
                 playlist.tracks.push(trackToAdd);
                 savePlaylists();
-                closeAddModal();
+                
+                if (currentViewedPlaylist && currentViewedPlaylist.id === playlist.id) {
+                    updatePlaylistInfoDisplay(currentViewedPlaylist);
+                    detailPlaylistCover.innerHTML = generatePlaylistCoverHTML(currentViewedPlaylist, true);
+                    renderPlaylistSongs(currentViewedPlaylist.tracks);
+                }
+                renderHomePlaylists();
+                
                 showToast(`Canción añadida a ${playlist.name}`);
-            });
-        }
+            }
+            closeAddModal();
+        });
+        
         modalPlaylistList.appendChild(item);
     });
 }
