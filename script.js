@@ -172,8 +172,58 @@ function generateId() {
     return Date.now().toString(36) + Math.random().toString(36).substring(2);
 }
 
+function updateAllTrackButtons() {
+    const btns = document.querySelectorAll('.add-to-playlist-btn');
+    btns.forEach(btn => {
+        const tid = btn.getAttribute('data-track-id');
+        if (tid) {
+            const saved = isTrackSaved(tid);
+            if (saved) {
+                btn.className = 'add-to-playlist-btn added';
+                btn.innerHTML = '<i class="fa-solid fa-check"></i>';
+                btn.title = 'Añadido a playlist';
+            } else {
+                btn.className = 'add-to-playlist-btn';
+                btn.innerHTML = '<i class="fa-solid fa-plus"></i>';
+                btn.title = 'Añadir a playlist';
+            }
+        }
+    });
+
+    try {
+        if (currentViewedAlbumMeta) {
+            const albumName = decodeHTML(currentViewedAlbumMeta.name || currentViewedAlbumMeta.title);
+            const albumExists = playlists.some(p => p.name === albumName && p.isAlbum === true);
+            const saveBtn = document.getElementById('saveAlbumBtn');
+            if (saveBtn) {
+                if (albumExists) {
+                    saveBtn.classList.add('added');
+                    saveBtn.innerHTML = '<i class="fa-solid fa-check" style="font-size: 16px;"></i>';
+                } else {
+                    saveBtn.classList.remove('added');
+                    saveBtn.innerHTML = '<i class="fa-solid fa-plus" style="font-size: 16px;"></i>';
+                }
+            }
+        }
+    } catch(e) {}
+}
+
 function savePlaylists() {
     localStorage.setItem('webMusicPlaylists', JSON.stringify(playlists));
+    updateAllTrackButtons();
+}
+
+function isTrackSaved(trackId) {
+    if (!trackId) return false;
+    return playlists.some(p => p.tracks && p.tracks.some(t => t.id === trackId.toString()));
+}
+
+function getTrackAddButtonHTML(track) {
+    const saved = isTrackSaved(track.id);
+    const cls = saved ? 'add-to-playlist-btn added' : 'add-to-playlist-btn';
+    const icon = saved ? 'fa-check' : 'fa-plus';
+    const title = saved ? 'Añadido a playlist' : 'Añadir a playlist';
+    return `<button class="${cls}" data-track-id="${track.id}" title="${title}"><i class="fa-solid ${icon}"></i></button>`;
 }
 
 // --- Toast Notifications ---
@@ -189,6 +239,7 @@ function showToast(message, icon = "fa-check-circle") {
 const mainHeader = document.querySelector('.main-header');
 
 function switchView(viewId) {
+    if(typeof fullPlayer !== 'undefined' && fullPlayer) fullPlayer.classList.remove('active');
     searchView.style.display = 'none';
     playlistsView.style.display = 'none';
     playlistDetailView.style.display = 'none';
@@ -320,12 +371,19 @@ function renderPlaylists() {
 
 function updatePlaylistInfoDisplay(playlist) {
     if (!detailPlaylistInfo) return;
-    const totalSeconds = playlist.tracks.reduce((acc, t) => acc + (parseInt(t.duration) || 0), 0);
+    const totalSeconds = playlist.tracks.reduce((acc, t) => {
+        let dur = 0;
+        if (t.duration) dur = parseInt(t.duration) || 0;
+        else if (t.trackTimeMillis) dur = Math.floor(t.trackTimeMillis / 1000) || 0;
+        if (dur === 0) dur = 180; // Legacy fallback estimation for old imported tracks
+        return acc + dur;
+    }, 0);
+    
     const hours = Math.floor(totalSeconds / 3600);
     const minutes = Math.floor((totalSeconds % 3600) / 60);
     
     let timeStr = '';
-    if (playlist.tracks.length > 0) {
+    if (playlist.tracks.length > 0 && totalSeconds > 0) {
         if (hours > 0) {
             timeStr = ` • ${hours}h ${minutes}m`;
         } else {
@@ -987,7 +1045,8 @@ async function executeTxtImport(pName, sourceData, targetPlaylistId = null) {
                     previewUrl: rawAudioUrl, // Usar la misma porque no hay otra
                     playCount: Number(jioData.playCount || 0),
                     album: { name: decodeHTML((jioData.album && jioData.album.name) || ''), id: '' },
-                    isPreview: isPreview
+                    isPreview: isPreview,
+                    duration: jioData.duration ? jioData.duration.toString() : "0"
                 };
                 
                 targetPlaylist.tracks.push(newTrack);
@@ -1377,11 +1436,11 @@ function appendResults(newTracks, startIndex) {
         item.innerHTML = `
             <img src="${smallArtworkUrl}" alt="Cover" loading="lazy">
             <div class="song-info">
-                <h4 style="display: flex; align-items: center;">${trackName} ${tagHtml}</h4>
+                <h4>${trackName} ${tagHtml}</h4>
                 ${artistHtml}
             </div>
             <div class="song-actions">
-                <button class="add-to-playlist-btn" title="Añadir a playlist"><i class="fa-solid fa-plus"></i></button>
+                ${getTrackAddButtonHTML(track)}
             </div>
         `;
         
@@ -1602,7 +1661,8 @@ async function openArtistDetail(artistId) {
                 previewUrl: rawAudioUrl, // Reusing main URL so fallback doesn't break
                 playCount: Number(jt.playCount || 0),
                 album: { name: decodeHTML((jt.album && jt.album.name) || ''), id: (jt.album && jt.album.id) || '' },
-                isPreview: isPreview
+                isPreview: isPreview,
+                duration: jt.duration ? jt.duration.toString() : "0"
             };
         });
         
@@ -1739,7 +1799,7 @@ function renderArtistSongs() {
                 ${artistHtml}
             </div>
             <div class="song-actions">
-                <button class="add-to-playlist-btn" title="Añadir a playlist"><i class="fa-solid fa-plus"></i></button>
+                ${getTrackAddButtonHTML(track)}
             </div>
         `;
         
@@ -1888,7 +1948,8 @@ async function openAlbumDetail(albumId, albumNameFallback = 'Álbum') {
              previewUrl: itrack.previewUrl || '',
              playCount: 0,
              album: { name: itrack.collectionName || '', id: itrack.collectionId || '' },
-             isPreview: true // Flag as preview until JioSaavn resolves it
+             isPreview: true,
+             duration: Math.floor((itrack.trackTimeMillis || 0) / 1000).toString()
         };
     });
     
@@ -1961,7 +2022,7 @@ function renderAlbumSongs() {
                 ${artistHtml}
             </div>
             <div class="song-actions">
-                <button class="add-to-playlist-btn" title="Añadir a playlist"><i class="fa-solid fa-plus"></i></button>
+                ${getTrackAddButtonHTML(track)}
             </div>
         `;
         
@@ -2309,6 +2370,23 @@ closePlayerBtn.addEventListener('click', () => {
     fullPlayer.classList.remove('active');
 });
 
+// Swipe Down to Close Player
+let playerTouchStartY = 0;
+
+fullPlayer.addEventListener('touchstart', (e) => {
+    playerTouchStartY = e.touches[0].clientY;
+}, {passive: true});
+
+fullPlayer.addEventListener('touchend', (e) => {
+    const touchEndY = e.changedTouches[0].clientY;
+    const swipeDistance = touchEndY - playerTouchStartY;
+    
+    // If swiped down more than 80px, close the player
+    if (swipeDistance > 80) {
+        fullPlayer.classList.remove('active');
+    }
+}, {passive: true});
+
 audioPlayer.addEventListener('ended', playNext);
 
 function savePlaybackState() {
@@ -2615,21 +2693,32 @@ function loadPlaybackState() {
     }
 }
 
-[miniArtist, fullArtist].forEach(el => {
-    el.addEventListener('click', (e) => {
-        if (e.target.classList.contains('artist-link')) {
-            e.stopPropagation();
-            const aid = e.target.getAttribute('data-artist-id');
-            if (aid) {
-                if (fullPlayer && fullPlayer.classList.contains('active')) {
-                    fullPlayer.classList.remove('active');
-                }
-                openArtistDetail(aid);
+fullArtist.addEventListener('click', (e) => {
+    if (e.target.classList.contains('artist-link')) {
+        e.stopPropagation();
+        const aid = e.target.getAttribute('data-artist-id');
+        if (aid) {
+            if (fullPlayer && fullPlayer.classList.contains('active')) {
+                fullPlayer.classList.remove('active');
             }
+            openArtistDetail(aid);
         }
-    });
+    }
 });
 
 // Initial View Load
 switchView('home');
 loadPlaybackState();
+
+// --- Splash Screen ---
+window.addEventListener('load', () => {
+    const splash = document.getElementById('appSplashScreen');
+    if (splash) {
+        // Subtle delay to let the app fully initialize and give a premium feel
+        setTimeout(() => {
+            splash.style.opacity = '0';
+            splash.style.visibility = 'hidden';
+            setTimeout(() => splash.remove(), 500);
+        }, 800);
+    }
+});

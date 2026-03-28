@@ -15,6 +15,11 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 <body>
+    <!-- App Splash Screen -->
+    <div id="appSplashScreen" style="position: fixed; inset: 0; background-color: #0f0f13; z-index: 99999; display: flex; align-items: center; justify-content: center; transition: opacity 0.4s ease-out, visibility 0.4s ease-out;">
+        <img src="logo.png" alt="Ñotify Logo" style="width: 140px; height: 140px; object-fit: contain; animation: splashPulse 2s infinite ease-in-out; border-radius: 50%;">
+    </div>
+
     <div class="app-container">
         <!-- Import Progress Banner -->
         <div id="importProgressBanner" style="display: none; position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background: rgba(28,28,33,0.9); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 15px 25px; z-index: 2000; box-shadow: 0 15px 35px rgba(0,0,0,0.6); min-width: 300px; text-align: center;">
