@@ -176,18 +176,6 @@ function savePlaylists() {
     localStorage.setItem('webMusicPlaylists', JSON.stringify(playlists));
 }
 
-// Builds individual clickable links for each artist in a comma-separated string
-function buildArtistHtml(artistName, artistIdsStr) {
-    const names = artistName.split(',').map(n => n.trim()).filter(Boolean);
-    const ids   = (artistIdsStr || '').split(',').map(id => id.trim()).filter(Boolean);
-    if (ids.length === 0) return `<p>${artistName}</p>`;
-    const parts = names.map((name, i) => {
-        const id = ids[i] || ids[0]; // fallback to first id if not enough ids
-        return `<span class="artist-link" data-artist-id="${id}" style="cursor:pointer;">${name}</span>`;
-    });
-    return `<p>${parts.join(', ')}</p>`;
-}
-
 // --- Toast Notifications ---
 function showToast(message, icon = "fa-check-circle") {
     const toast = document.createElement('div');
@@ -401,10 +389,11 @@ function renderPlaylistSongs(tracksToRender) {
         const artistName = decodeHTML(track.primaryArtists || track.singers || "Artista Desconocido");
         const trackName = decodeHTML(track.name || track.title);
         
-        const artistHtml = buildArtistHtml(
-            decodeHTML(track.primaryArtists || track.singers || 'Artista Desconocido'),
-            track.primaryArtistsId || track.artistId || ''
-        );
+        const artistId = (track.primaryArtistsId || '').split(',')[0].trim() || (track.artistId || '').split(',')[0].trim();
+        let artistHtml = `<p>${artistName}</p>`;
+        if (artistId) {
+            artistHtml = `<p><span class="artist-link" data-artist-id="${artistId}" style="cursor: pointer;">${artistName}</span></p>`;
+        }
         
         const item = document.createElement('div');
         item.className = 'song-item';
@@ -752,7 +741,56 @@ importTxtInput.addEventListener('change', (e) => {
     }
 });
 
-// Global Heuristic Scorer for Audio Variant Filtration
+// --- 3-Layer Strict Filtraton Wall ---
+function passesStrictFilters(trackObj, expectedArtist, expectedTitle) {
+    if (!trackObj) return false;
+    
+    // Normalize inputs
+    const tName = (trackObj.name || trackObj.title || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    const tArtist = (trackObj.primaryArtists || trackObj.singers || trackObj.artist || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    const tLang = (trackObj.language || '').toLowerCase().trim();
+    
+    const eTitle = (expectedTitle || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    const eArtist = (expectedArtist || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
+    // 1. Language Wall
+    // Block unwanted regional languages UNLESS explicitly requested in the query
+    const forbiddenLangs = ['hindi', 'tamil', 'telugu', 'punjabi', 'arabic', 'marathi', 'gujarati', 'bengali', 'kannada', 'malayalam', 'urdu', 'bhojpuri', 'haryanvi', 'rajasthani', 'odia', 'assamese'];
+    if (forbiddenLangs.includes(tLang)) {
+        // If the expected title or artist actually contains the language name, we allow it (explicit search)
+        const isExplicitlyRequested = forbiddenLangs.some(lang => eTitle.includes(lang) || eArtist.includes(lang));
+        if (!isExplicitlyRequested) return false;
+    }
+
+    // 2. Exact Artist Wall
+    if (eArtist) {
+        // We require the returned artist string to explicitly contain the expected artist name.
+        // E.g. If searching "Radiohead", the artist MUST contain "radiohead". "Cover Band" fails.
+        const eArtistClean = eArtist.replace(/[^a-z0-9]/g, '');
+        const tArtistClean = tArtist.replace(/[^a-z0-9]/g, '');
+        
+        if (eArtistClean.length > 2) { // Only enforce for meaningful names
+            if (!tArtistClean.includes(eArtistClean) && !eArtistClean.includes(tArtistClean)) {
+                return false;
+            }
+        }
+    }
+
+    // 3. Prohibited Terms Wall (Covers/Tributes)
+    const prohibitedTerms = ['cover', 'tribute', 'remix', 'tributo', 'version', 'karaoke', 'instrumental', 'sped up', 'slowed', 'remake'];
+    for (const term of prohibitedTerms) {
+        // If the track name has a prohibited term...
+        if (tName.includes(term)) {
+            // ...but the user DID NOT explicitly ask for it, BLOCK IT.
+            if (!eTitle.includes(term)) {
+                return false;
+            }
+        }
+    }
+
+    return true; // Passed all layers
+}
+
 // Global Heuristic Scorer for Audio Variant Filtration
 function getTrackScore(trackName, artistName, expectedArtist, expectedTitle, playCount = 0) {
     let score = 100;
@@ -868,38 +906,46 @@ async function executeTxtImport(pName, sourceData, targetPlaylistId = null) {
                 expectedTitle = parts.slice(1).join('-').trim();
             }
             
-            let itunesData = null;
+            let jioData = null;
             let successFetch = false;
             
-            // 3-Strike Retry Mechanism to bypass sudden Apple 429 Limits and TCP Drops
+            // 3-Strike Retry Mechanism to bypass sudden rate limits
             for (let attempt = 1; attempt <= 3; attempt++) {
                 try {
-                    const itunesUrl = `https://itunes.apple.com/search?term=${encodeURIComponent(rawQuery)}&entity=song&limit=5`;
-                    const itunesRes = await fetch(itunesUrl);
+                    const jioUrl = `https://jiosaavn-api-privatecvc2.vercel.app/search/songs?query=${encodeURIComponent(rawQuery)}&limit=7`;
+                    const jioRes = await fetch(jioUrl);
                     
-                    if (itunesRes.status === 429 || itunesRes.status === 403) {
-                        await new Promise(r => setTimeout(r, 4000)); // Rest for 4 seconds before retrying
+                    if (jioRes.status === 429) {
+                        await new Promise(r => setTimeout(r, 4000));
                         continue;
                     }
                     
-                    if (itunesRes.ok) {
-                        itunesData = await itunesRes.json();
-                        if (itunesData.results && itunesData.results.length > 0) {
-                            itunesData.results.sort((a,b) => getTrackScore(b.trackName, b.artistName, expectedArtist, expectedTitle) - getTrackScore(a.trackName, a.artistName, expectedArtist, expectedTitle));
+                    if (jioRes.ok) {
+                        const jd = await jioRes.json();
+                        let hits = [];
+                        if (jd.data && jd.data.results) hits = jd.data.results;
+                        else if (jd.results) hits = jd.results;
+                        
+                        if (hits && hits.length > 0) {
+                            // STRICT FILTRATION WALL
+                            const validHits = hits.filter(h => passesStrictFilters(h, expectedArtist, expectedTitle));
+                            
+                            if (validHits.length > 0) {
+                                validHits.sort((a,b) => b.playCount - a.playCount);
+                                jioData = validHits[0];
+                                successFetch = true;
+                                break;
+                            }
                         }
-                        successFetch = true;
-                        break;
                     }
                 } catch(netErr) {
                     await new Promise(r => setTimeout(r, 2000));
                 }
             }
             
-            if (!successFetch || !itunesData || !itunesData.results || itunesData.results.length === 0) {
-                // FALLBACK: If Apple actively blocked us via 403 permanently or returned empty, query JioSaavn cleanly.
-                let fbData = null;
+            if (!successFetch || !jioData) {
+                // FALLBACK TO ALTERNATE JIOSAAVN INSTANCE if the primary fails
                 const fbApis = [
-                    `https://jiosaavn-api-privatecvc2.vercel.app/search/songs?query=${encodeURIComponent(rawQuery)}&limit=5`,
                     `https://saavn.dev/api/search/songs?query=${encodeURIComponent(rawQuery)}&limit=5`,
                     `https://saavn.me/search/songs?query=${encodeURIComponent(rawQuery)}&limit=5`
                 ];
@@ -914,98 +960,37 @@ async function executeTxtImport(pName, sourceData, targetPlaylistId = null) {
                             else if (Array.isArray(fd.data)) fHits = fd.data;
                             
                             if (fHits.length > 0) {
-                                fHits.sort((a,b) => getTrackScore(b.name || b.title, b.primaryArtists || b.singers, expectedArtist, expectedTitle, b.playCount) - getTrackScore(a.name || a.title, a.primaryArtists || a.singers, expectedArtist, expectedTitle, a.playCount));
-                                fbData = fHits[0];
-                                break;
+                                const validHits = fHits.filter(h => passesStrictFilters(h, expectedArtist, expectedTitle));
+                                if (validHits.length > 0) {
+                                    validHits.sort((a,b) => b.playCount - a.playCount);
+                                    jioData = validHits[0];
+                                    break;
+                                }
                             }
                         }
                     } catch(e){}
                 }
+            }
                 
-                if (fbData) {
-                    targetPlaylist.tracks.push({
-                        id: fbData.id.toString(),
-                        name: decodeHTML(fbData.name || fbData.title),
-                        title: decodeHTML(fbData.name || fbData.title),
-                        primaryArtists: decodeHTML(fbData.primaryArtists || fbData.singers),
-                        primaryArtistsId: (fbData.primaryArtistsId || '').toString(),
-                        image: fbData.image || [],
-                        downloadUrl: fbData.downloadUrl || [],
-                        previewUrl: '',
-                        playCount: 0,
-                        album: { name: decodeHTML((fbData.album && fbData.album.name) || ''), id: '' },
-                        isPreview: false
-                    });
-                    savePlaylists(); // Live-save
-                    if (currentViewedPlaylist && currentViewedPlaylist.id === targetPlaylist.id) {
-                        updatePlaylistInfoDisplay(targetPlaylist);
-                        renderPlaylistSongs(targetPlaylist.tracks);
-                    } else if (playlistsView.style.display === 'flex') {
-                        renderPlaylists();
-                    }
-                } else {
-                    failedList.push({ request: line, reason: "Catálogo de Apple rechazó petición y motores de respaldo inalcanzables" });
-                }
-            } else {
-                const itrack = itunesData.results[0];
-                const cleanArtist = (itrack.artistName || '').split(',')[0].trim();
-                const safeQuery = `${itrack.trackName} ${cleanArtist}`.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9\s-]/g, '');
-                const q1 = encodeURIComponent(safeQuery);
+            if (jioData) {
+                const rawAudioUrl = getBestAudioUrl(jioData.downloadUrl) || '';
+                const isPreview = !rawAudioUrl;
                 
-                let audioUrl = '';
-                let cacheObj = [];
-                let isPreview = true;
-                
-                const jioApis = [
-                    `https://jiosaavn-api-privatecvc2.vercel.app/search/songs?query=${q1}&limit=5`,
-                    `https://saavn.dev/api/search/songs?query=${q1}&limit=5`,
-                    `https://saavn.me/search/songs?query=${q1}&limit=5`
-                ];
-                
-                for (let u of jioApis) {
-                    try {
-                        const res = await fetch(u);
-                        if (res.ok) {
-                            const d = await res.json();
-                            let hits = [];
-                            if (d.data && d.data.results) hits = d.data.results;
-                            else if (d.results) hits = d.results;
-                            else if (Array.isArray(d.data)) hits = d.data;
-                            
-                            if (hits && hits.length > 0) {
-                                // HEURISTIC AUDIO MATCHER
-                                hits.sort((a,b) => getTrackScore(b.name || b.title, b.primaryArtists || b.singers, cleanArtist, itrack.trackName, b.playCount) - getTrackScore(a.name || a.title, a.primaryArtists || a.singers, cleanArtist, itrack.trackName, a.playCount));
-                                
-                                const aObj = hits[0].downloadUrl && Array.isArray(hits[0].downloadUrl) ? (hits[0].downloadUrl.find(url => url.quality && url.quality.includes('320')) || hits[0].downloadUrl[hits[0].downloadUrl.length - 1]) : null;
-                                if (aObj) {
-                                    audioUrl = aObj.url || aObj.link;
-                                    cacheObj = hits[0].downloadUrl;
-                                    isPreview = false;
-                                }
-                                break;
-                            }
-                        }
-                    } catch(e) {}
-                }
-                
-                if (isPreview) {
-                    failedList.push({ request: line, reason: "Solo disponible como Preview (30s) de Apple. Se añadió igual." });
-                }
-                
-                targetPlaylist.tracks.push({
-                    id: itrack.trackId.toString(),
-                    name: itrack.trackName,
-                    title: itrack.trackName,
-                    primaryArtists: itrack.artistName,
-                    primaryArtistsId: (itrack.artistId || '').toString(),
-                    image: [ { quality: '500x500', url: (itrack.artworkUrl100 || '').replace('100x100', '500x500') } ],
-                    downloadUrl: cacheObj,
-                    previewUrl: itrack.previewUrl || '',
-                    playCount: 0,
-                    album: { name: itrack.collectionName || '', id: itrack.collectionId || '' },
+                const newTrack = {
+                    id: jioData.id.toString(),
+                    name: decodeHTML(jioData.name || jioData.title),
+                    title: decodeHTML(jioData.name || jioData.title),
+                    primaryArtists: decodeHTML(jioData.primaryArtists || jioData.singers),
+                    primaryArtistsId: (jioData.primaryArtistsId || '').toString(),
+                    image: jioData.image || [],
+                    downloadUrl: rawAudioUrl ? [{quality: '320kbps', url: rawAudioUrl}] : [],
+                    previewUrl: rawAudioUrl, // Usar la misma porque no hay otra
+                    playCount: Number(jioData.playCount || 0),
+                    album: { name: decodeHTML((jioData.album && jioData.album.name) || ''), id: '' },
                     isPreview: isPreview
-                });
+                };
                 
+                targetPlaylist.tracks.push(newTrack);
                 savePlaylists(); // Live-save
                 
                 // Live UI update if currently viewing this specific playlist
@@ -1013,9 +998,32 @@ async function executeTxtImport(pName, sourceData, targetPlaylistId = null) {
                     updatePlaylistInfoDisplay(targetPlaylist);
                     renderPlaylistSongs(targetPlaylist.tracks);
                 } else if (playlistsView.style.display === 'flex') {
-                    // Update generic library view thumbs live
                     renderPlaylists();
                 }
+                
+                // Background Apple Music Artwork Fetch (Master Quality)
+                const applyAppleQuery = `${newTrack.name} ${newTrack.primaryArtists.split(',')[0]}`;
+                fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(applyAppleQuery)}&entity=song&limit=5`)
+                    .then(r => r.json())
+                    .then(appleData => {
+                        const appleTracks = appleData.results || [];
+                        const localSafeName = newTrack.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+                        const masterHit = appleTracks.find(at => {
+                            const atName = (at.trackName || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+                            return atName.includes(localSafeName) || localSafeName.includes(atName);
+                        });
+                        if (masterHit && masterHit.artworkUrl100) {
+                            newTrack.image = [ { quality: '500x500', url: masterHit.artworkUrl100.replace('100x100', '500x500') } ];
+                            savePlaylists();
+                            if (currentViewedPlaylist && currentViewedPlaylist.id === targetPlaylist.id) {
+                                const imgEl = document.querySelector(`.playlist-song-item img[data-track-index="${targetPlaylist.tracks.length - 1}"]`);
+                                if (imgEl) imgEl.src = newTrack.image[0].url;
+                            }
+                        }
+                    }).catch(()=>{});
+                    
+            } else {
+                failedList.push({ request: line, reason: "No se encontró audio original que superase el filtro estricto." });
             }
         } catch (globalError) {
             failedList.push({ request: line, reason: "Fallo crítico en API de escáner." });
@@ -1111,6 +1119,23 @@ function renderModalPlaylists() {
     });
 }
 
+// Helper: Resuelve la mejor URL de audio disponible (prioriza 320kbps)
+function getBestAudioUrl(downloadUrlArray) {
+    if (!downloadUrlArray || !Array.isArray(downloadUrlArray) || downloadUrlArray.length === 0) return null;
+    
+    // Buscar preferiblemente la de 320kbps
+    const hd = downloadUrlArray.find(url => url.quality && url.quality.includes('320'));
+    if (hd && (hd.url || hd.link)) return hd.url || hd.link;
+    
+    // Si no hay 320, buscar 160
+    const md = downloadUrlArray.find(url => url.quality && url.quality.includes('160'));
+    if (md && (md.url || md.link)) return md.url || md.link;
+    
+    // Fallback: la última del array suele ser la de mayor calidad
+    const last = downloadUrlArray[downloadUrlArray.length - 1];
+    return last.url || last.link;
+}
+
 // --- Search API with Pagination ---
 async function searchSongs(query, page = 1) {
     if (!query.trim()) {
@@ -1140,7 +1165,6 @@ async function searchSongs(query, page = 1) {
             </div>
         `;
     } else {
-        // Append bottom loader
         const loader = document.createElement('div');
         loader.className = 'bottom-loader';
         loader.id = 'bottomLoader';
@@ -1157,15 +1181,27 @@ async function searchSongs(query, page = 1) {
             artistPromise = fetchArtistSearch(query);
         }
 
-        // 1. Pristine Master Fetch from Apple iTunes
-        const offset = (page - 1) * 30;
-        const itunesUrl = `https://itunes.apple.com/search?term=${encodeURIComponent(query)}&entity=song&limit=30&offset=${offset}`;
-        const itunesRes = await fetch(itunesUrl);
-        const itunesData = await itunesRes.json();
-        const itunesTracks = itunesData.results || [];
+        // 1. Pristine Master Fetch from JioSaavn (Audio + Metadata Master)
+        let jioTracks = [];
+        const jioApis = [
+            `https://jiosaavn-api-privatecvc2.vercel.app/search/songs?query=${encodeURIComponent(query)}&page=${page}&limit=40`,
+            `https://saavn.dev/api/search/songs?query=${encodeURIComponent(query)}&page=${page}&limit=40`,
+            `https://saavn.me/search/songs?query=${encodeURIComponent(query)}&page=${page}&limit=40`
+        ];
+        
+        for (let u of jioApis) {
+            try {
+                const jioRes = await fetch(u);
+                if (jioRes.ok) {
+                    const jd = await jioRes.json();
+                    if (jd.data && jd.data.results) { jioTracks = jd.data.results; break; }
+                    else if (jd.results) { jioTracks = jd.results; break; }
+                }
+            } catch(e) {}
+        }
 
-        if (itunesTracks.length === 0) {
-            if (page === 1) throw new Error("No se encontraron resultados en iTunes.");
+        if (jioTracks.length === 0) {
+            if (page === 1) throw new Error("No se encontraron resultados en el servidor principal.");
             else {
                 hasMoreResults = false;
                 isFetching = false;
@@ -1175,52 +1211,67 @@ async function searchSongs(query, page = 1) {
             }
         }
 
-        // 2. Background JioSaavn Fetch for Stream Resolution
-        let jioTracks = [];
-        try {
-            const jioUrl = `https://jiosaavn-api-privatecvc2.vercel.app/search/songs?query=${encodeURIComponent(query)}&page=${page}&limit=40`;
-            const jioRes = await fetch(jioUrl);
-            if (jioRes.ok) {
-                const jd = await jioRes.json();
-                if (jd.data && jd.data.results) jioTracks = jd.data.results;
-                else if (jd.results) jioTracks = jd.results;
-            }
-        } catch(e) {}
+        // Parse explicit expected title & artist roughly from query if user used a dash
+        let expectedArtist = '';
+        let expectedTitle = query;
+        if (query.includes('-')) {
+            const parts = query.split('-');
+            expectedArtist = parts[0].trim();
+            expectedTitle = parts.slice(1).join('-').trim();
+        }
 
-        // 3. Perfect Formatting & Stream Cross-Referencing
-        let newTracks = itunesTracks.map(itrack => {
-            const cleanArtist = (itrack.artistName || '').split(',')[0].trim();
-            const appleName = itrack.trackName || '';
-            const safeAppleName = appleName.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]/g, '');
+        // 2. Strict Filtration Wall (Language, Correct Artist, Prohibited terms)
+        const validTracks = jioTracks.filter(jt => passesStrictFilters(jt, expectedArtist, expectedTitle));
+        
+        // 3. Format Tracks & Extract Highest Quality Audio (320kbps prioritized)
+        let newTracks = validTracks.map(jt => {
+            const rawAudioUrl = getBestAudioUrl(jt.downloadUrl) || '';
+            const isPreview = !rawAudioUrl; // If we somehow lost audio, flag as preview visually
             
-            // Score all JioSaavn tracks against this specific Apple metadata
-            let bestMatch = null;
-            let bestScore = -Infinity;
-            
-            for (let jt of jioTracks) {
-                const jtName = (jt.name || jt.title || '').normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]/g, '');
-                if (jtName.includes(safeAppleName) || safeAppleName.includes(jtName)) {
-                    const score = getTrackScore(jt.name || jt.title, jt.primaryArtists || jt.singers, cleanArtist, appleName, jt.playCount);
-                    if (score > bestScore) {
-                        bestScore = score;
-                        bestMatch = jt;
-                    }
-                }
-            }
-
             return {
-                id: itrack.trackId.toString(),
-                name: itrack.trackName,
-                title: itrack.trackName,
-                primaryArtists: itrack.artistName,
-                primaryArtistsId: (itrack.artistId || '').toString(),
-                image: [ { quality: '500x500', url: (itrack.artworkUrl100 || '').replace('100x100', '500x500') } ],
-                downloadUrl: (bestMatch && bestMatch.downloadUrl) ? bestMatch.downloadUrl : [], // If missed -> Empty array -> triggers Unavailable Tag
-                previewUrl: itrack.previewUrl || '',
-                playCount: 0,
-                album: { name: itrack.collectionName || '', id: itrack.collectionId || '' }
+                id: jt.id.toString(),
+                name: decodeHTML(jt.name || jt.title),
+                title: decodeHTML(jt.name || jt.title),
+                primaryArtists: decodeHTML(jt.primaryArtists || jt.singers),
+                primaryArtistsId: (jt.primaryArtistsId || '').toString(),
+                image: jt.image || [{ quality: '150x150', url: 'https://via.placeholder.com/150' }],
+                downloadUrl: rawAudioUrl ? [{quality: '320kbps', url: rawAudioUrl}] : [],
+                previewUrl: rawAudioUrl, // Reusing main URL so fallback doesn't break
+                playCount: Number(jt.playCount || 0),
+                album: { name: decodeHTML((jt.album && jt.album.name) || ''), id: (jt.album && jt.album.id) || '' },
+                isPreview: isPreview
             };
         });
+        
+        // Sort by playCount (popularity heuristics)
+        newTracks.sort((a,b) => b.playCount - a.playCount);
+
+        // 4. Background Apple Music Cover Art Enrichment
+        // We do this instantly without awaiting so the user gets results immediately, 
+        // and covers magically snap into high-res when iTunes responds.
+        if (newTracks.length > 0) {
+            const appleQuery = `${newTracks[0].name} ${newTracks[0].primaryArtists.split(',')[0]}`;
+            fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(appleQuery)}&entity=song&limit=15`)
+                .then(r => r.json())
+                .then(appleData => {
+                    const appleTracks = appleData.results || [];
+                    newTracks.forEach((localTrack) => {
+                        const localSafeName = localTrack.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+                        const masterHit = appleTracks.find(at => {
+                            const atName = (at.trackName || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+                            return atName.includes(localSafeName) || localSafeName.includes(atName);
+                        });
+                        
+                        // Si encontramos una coincidencia en Apple, robamos su Artwork HD
+                        if (masterHit && masterHit.artworkUrl100) {
+                            localTrack.image = [ { quality: '500x500', url: masterHit.artworkUrl100.replace('100x100', '500x500') } ];
+                            // Re-render visual de la carátula si el DOM ya se pintó
+                            const imgEl = document.querySelector(`.song-item img[data-track-id="${localTrack.id}"]`);
+                            if (imgEl) imgEl.src = localTrack.image[0].url;
+                        }
+                    });
+                }).catch(e => console.warn("Apple Cover Art Fetch Failed", e));
+        }
 
         if (page === 1) {
             searchResults.innerHTML = '';
@@ -1248,6 +1299,7 @@ async function searchSongs(query, page = 1) {
         
         currentPage = page;
         isFetching = false;
+        hasMoreResults = newTracks.length >= 10; // If jioSaavn returned fewer than 10 valid, assume end
     } catch (error) {
         console.error("API Error: ", error);
         isFetching = false;
@@ -1255,7 +1307,7 @@ async function searchSongs(query, page = 1) {
             searchResults.innerHTML = `
                 <div class="empty-state">
                     <i class="fa-solid fa-triangle-exclamation"></i>
-                    <p>Error buscando en los servidores. Inténtalo de nuevo.</p>
+                    <p>No se encontraron resultados compatibles (Filtro Estricto activado).</p>
                 </div>
             `;
         } else {
@@ -1280,10 +1332,11 @@ function appendResults(newTracks, startIndex) {
         
         const tagHtml = track.isPreview ? `<span class="preview-tag" style="background: rgba(255,0,0,0.2); color: #ff6b6b; padding: 2px 6px; border-radius: 4px; font-size: 10px; margin-left: 8px; vertical-align: middle; white-space: nowrap;">Solo Preview</span>` : '';
         
-        const artistHtml = buildArtistHtml(
-            decodeHTML(track.primaryArtists || track.singers || 'Artista Desconocido'),
-            track.primaryArtistsId || track.artistId || ''
-        );
+        const artistId = (track.primaryArtistsId || '').split(',')[0].trim() || (track.artistId || '').split(',')[0].trim();
+        let artistHtml = `<p>${artistName}</p>`;
+        if (artistId) {
+            artistHtml = `<p><span class="artist-link" data-artist-id="${artistId}" style="cursor: pointer;">${artistName}</span></p>`;
+        }
         
         const item = document.createElement('div');
         item.className = 'song-item';
@@ -1457,20 +1510,25 @@ async function openArtistDetail(artistId) {
         if (!data.results || data.results.length === 0) throw new Error("Artista no encontrado en iTunes.");
         
         const artistInfo = data.results[0];
-        const songsData = data.results.slice(1);
+        const songsData = data.results.length > 1 ? data.results.slice(1) : []; // Safely handle 0 songs
         const aName = decodeHTML(artistInfo.artistName || "Artista");
         
         detailArtistTitleHero.textContent = aName;
         stickyArtistTitle.textContent = aName;
         
-        // Grab artwork from best hit
+        // Grab artwork from best hit safely
         let imgUrl = 'https://via.placeholder.com/500?text=Artist';
-        if (songsData.length > 0 && songsData[0].artworkUrl100) {
+        if (songsData && songsData.length > 0 && songsData[0].artworkUrl100) {
              imgUrl = songsData[0].artworkUrl100.replace('100x100', '1000x1000');
+        } else if (artistInfo.artistLinkUrl) {
+             // Sometimes artist lookup doesn't return songs but we can still show a generic avatar
+             imgUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(aName)}&size=500&background=random`;
         }
         artistHeroImage.src = imgUrl;
         
-        // Asynchronously fetch JioSaavn stat listeners and background cross-reference array for Top Tracks
+        // 1. Apple provides the official Artist Name, Hero Image, and Albums.
+        // But for TOP TRACKS, we fetch from JioSaavn, filter them strictly, and extract 320kbps.
+        
         let jioTracks = [];
         try {
              fetch(`https://jiosaavn-api-privatecvc2.vercel.app/search/artists?query=${encodeURIComponent(aName)}&limit=3`)
@@ -1481,9 +1539,9 @@ async function openArtistDetail(artistId) {
                  if (match && match.followerCount) {
                      detailArtistInfo.textContent = `${Number(match.followerCount).toLocaleString()} oyentes mensuales`;
                  } else {
-                     detailArtistInfo.textContent = `Artista Oficial (Apple Music)`;
+                     detailArtistInfo.textContent = `Artista Oficial`;
                  }
-             }).catch(()=>{detailArtistInfo.textContent = `Artista Oficial (Apple Music)`;});
+             }).catch(()=>{detailArtistInfo.textContent = `Artista Oficial`;});
              
              const jioSongsRes = await fetch(`https://jiosaavn-api-privatecvc2.vercel.app/search/songs?query=${encodeURIComponent(aName)}&limit=50`);
              const jioSongsData = await jioSongsRes.json();
@@ -1491,26 +1549,43 @@ async function openArtistDetail(artistId) {
              else if (jioSongsData.results) jioTracks = jioSongsData.results;
         } catch(e) {}
              
-        currentArtistQueue = songsData.map(itrack => {
-             const safeName = (itrack.trackName || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-             const jMatch = jioTracks.find(jt => {
-                 const jtName = (jt.name || jt.title || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-                 return jtName.includes(safeName) || safeName.includes(jtName);
-             });
-             
-             return {
-                 id: itrack.trackId.toString(),
-                 name: itrack.trackName,
-                 title: itrack.trackName,
-                 primaryArtists: itrack.artistName,
-                 primaryArtistsId: (itrack.artistId || '').toString(),
-                 image: [ { quality: '500x500', url: (itrack.artworkUrl100 || '').replace('100x100', '500x500') } ],
-                 downloadUrl: (jMatch && jMatch.downloadUrl) ? jMatch.downloadUrl : [],
-                 previewUrl: itrack.previewUrl || '',
-                 playCount: 0,
-                 album: { name: itrack.collectionName || '', id: itrack.collectionId || '' }
-             };
+        // 2. Strict Filtration Wall (Language, Correct Artist, Prohibited terms)
+        const validTracks = jioTracks.filter(jt => passesStrictFilters(jt, aName, ''));
+        
+        // 3. Format Tracks & Extract Highest Quality Audio (320kbps prioritized)
+        currentArtistQueue = validTracks.slice(0, 30).map(jt => {
+            const rawAudioUrl = getBestAudioUrl(jt.downloadUrl) || '';
+            const isPreview = !rawAudioUrl; // If we somehow lost audio, flag as preview visually
+            
+            return {
+                id: jt.id.toString(),
+                name: decodeHTML(jt.name || jt.title),
+                title: decodeHTML(jt.name || jt.title),
+                primaryArtists: decodeHTML(jt.primaryArtists || jt.singers),
+                primaryArtistsId: (jt.primaryArtistsId || '').toString(),
+                image: jt.image || [{ quality: '150x150', url: 'https://via.placeholder.com/150' }],
+                downloadUrl: rawAudioUrl ? [{quality: '320kbps', url: rawAudioUrl}] : [],
+                previewUrl: rawAudioUrl, // Reusing main URL so fallback doesn't break
+                playCount: Number(jt.playCount || 0),
+                album: { name: decodeHTML((jt.album && jt.album.name) || ''), id: (jt.album && jt.album.id) || '' },
+                isPreview: isPreview
+            };
         });
+        
+        // Background Apple Music Cover Art Enrichment for Artist Tracks
+        if (currentArtistQueue.length > 0) {
+            currentArtistQueue.forEach((localTrack) => {
+                const localSafeName = localTrack.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+                const masterHit = songsData.find(at => {
+                    const atName = (at.trackName || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+                    return atName.includes(localSafeName) || localSafeName.includes(atName);
+                });
+                
+                if (masterHit && masterHit.artworkUrl100) {
+                    localTrack.image = [ { quality: '500x500', url: masterHit.artworkUrl100.replace('100x100', '500x500') } ];
+                }
+            });
+        }
         
         renderArtistSongs();
         
@@ -1524,7 +1599,9 @@ async function openArtistDetail(artistId) {
         updatePlayState(!audioPlayer.paused);
         
     } catch(e) {
-        artistSongsContainer.innerHTML = '<p style="padding: 20px; color: var(--text-secondary);">Error cargando información del artista desde Apple.</p>';
+        console.error("Error OpenArtistDetail: ", e);
+        artistSongsContainer.innerHTML = '<p style="padding: 20px; color: var(--text-secondary);">Error cargando información del artista.</p>';
+        detailArtistTitleHero.textContent = "Artista no encontrado";
     }
 }
 
@@ -1545,13 +1622,29 @@ async function fetchMoreArtistAlbums(artistId, page) {
 
     let albumsData = [];
     try {
+        // STRICT APPLE MUSIC CATALOG FOR ALBUMS
         const u = `https://itunes.apple.com/lookup?id=${artistId}&entity=album&limit=50`;
         const res = await fetch(u);
         const val = await res.json();
         if (val.results && val.results.length > 1) {
             albumsData = val.results.slice(1);
+            
+            // Deduplicate albums by name to avoid Deluxe/Standard duplicate spam
+            const uniqueMap = new Map();
+            albumsData.forEach(a => {
+                const safeName = (a.collectionName || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+                if (!uniqueMap.has(safeName) && a.collectionType === "Album") {
+                    uniqueMap.set(safeName, a);
+                }
+            });
+            albumsData = Array.from(uniqueMap.values());
+            
+            // Sort by release date descending
+            albumsData.sort((a,b) => new Date(b.releaseDate) - new Date(a.releaseDate));
         }
-    } catch(e) {}
+    } catch(e) {
+        console.error("Error Fetching Apple Albums: ", e);
+    }
     
     const oldLoader = document.getElementById('artistAlbumLoader');
     if (oldLoader) oldLoader.remove();
@@ -1566,14 +1659,15 @@ async function fetchMoreArtistAlbums(artistId, page) {
             
             const coverUrl = album.artworkUrl100 ? album.artworkUrl100.replace('100x100', '500x500') : 'https://via.placeholder.com/150';
             const releaseDate = album.releaseDate ? album.releaseDate.substring(0, 4) : '';
+            const albName = decodeHTML(album.collectionName || 'Álbum Desconocido');
             
             card.innerHTML = `
                 <img src="${coverUrl}" loading="lazy" class="card-cover">
-                <h4>${decodeHTML(album.collectionName || 'Álbum Desconocido')}</h4>
+                <h4>${albName}</h4>
                 <p>${releaseDate}</p>
             `;
-            // NOTE: We don't have openAlbumDetail refactored to Apple IDs yet, but we will pass the Apple collectionId!
-            card.addEventListener('click', () => openAlbumDetail(album.collectionId.toString()));
+            
+            card.addEventListener('click', () => openAlbumDetail(album.collectionId.toString(), albName));
             artistAlbumsContainer.appendChild(card);
         });
         hasMoreArtistAlbums = false; 
@@ -1596,10 +1690,11 @@ function renderArtistSongs() {
         const artistName = decodeHTML(track.primaryArtists || track.singers || "Artista Desconocido");
         const trackName = decodeHTML(track.name || track.title);
         
-        const artistHtml = buildArtistHtml(
-            decodeHTML(track.primaryArtists || track.singers || 'Artista Desconocido'),
-            track.primaryArtistsId || track.artistId || ''
-        );
+        const artistId = (track.primaryArtistsId || '').split(',')[0].trim() || (track.artistId || '').split(',')[0].trim();
+        let artistHtml = `<p>${artistName}</p>`;
+        if (artistId) {
+            artistHtml = `<p><span class="artist-link" data-artist-id="${artistId}" style="cursor: pointer;">${artistName}</span></p>`;
+        }
         
         const item = document.createElement('div');
         item.className = 'song-item';
@@ -1692,9 +1787,9 @@ shuffleArtistBtn.addEventListener('click', () => {
 let currentAlbumQueue = [];
 let currentViewedAlbumMeta = null;
 
-async function openAlbumDetail(albumId) {
+async function openAlbumDetail(albumId, albumNameFallback = 'Álbum') {
     switchView('albumDetail');
-    albumSongsContainer.innerHTML = '<div class="bottom-loader" style="padding: 20px; text-align: center; color: var(--text-secondary);"><i class="fa-solid fa-circle-notch fa-spin"></i> Cargando álbum...</div>';
+    albumSongsContainer.innerHTML = '<div class="bottom-loader" style="padding: 20px; text-align: center; color: var(--text-secondary);"><i class="fa-solid fa-circle-notch fa-spin"></i> Cargando álbum oficial...</div>';
     
     albumHeroImage.src = '';
     detailAlbumTitleHero.textContent = '';
@@ -1702,36 +1797,38 @@ async function openAlbumDetail(albumId) {
     stickyAlbumTitle.textContent = '';
     saveAlbumBtn.style.color = 'var(--text-secondary)';
     
-    const urls = [
-        `https://jiosaavn-api-privatecvc2.vercel.app/albums?id=${albumId}`,
-        `https://saavn.dev/api/albums?id=${albumId}`,
-        `https://saavn.me/albums?id=${albumId}`
-    ];
+    let appleSongs = [];
+    let albumMeta = null;
     
-    let albumData = null;
-    for (let u of urls) {
-         try {
-             const res = await fetch(u);
-             if(res.ok) {
-                 const d = await res.json();
-                 if(d.data && d.data.songs) { albumData = d.data; break; }
-                 else if (d.songs) { albumData = d; break; }
-             }
-         } catch(e) {}
+    try {
+        const u = `https://itunes.apple.com/lookup?id=${albumId}&entity=song&limit=200`;
+        const res = await fetch(u);
+        const data = await res.json();
+        
+        if (data.results && data.results.length > 0) {
+            albumMeta = data.results[0]; // The first result is the Album itself
+            appleSongs = data.results.slice(1); // The rest are the tracks
+        }
+    } catch(e) {
+        console.error("Apple Album Lookup Failed", e);
     }
     
-    if(!albumData) {
-        albumSongsContainer.innerHTML = '<p style="padding: 20px; color: var(--text-secondary);">Error cargando información del álbum.</p>';
+    if(!albumMeta) {
+        albumSongsContainer.innerHTML = '<p style="padding: 20px; color: var(--text-secondary);">Error cargando información del álbum oficial.</p>';
         return;
     }
     
-    currentViewedAlbumMeta = albumData;
+    currentViewedAlbumMeta = {
+        id: albumId,
+        name: albumMeta.collectionName || albumNameFallback,
+        image: [{url: albumMeta.artworkUrl100 ? albumMeta.artworkUrl100.replace('100x100', '500x500') : ''}],
+        songs: [] // Will populate after Jio fetch
+    };
     
-    const coverArr = albumData.image || [];
-    const imgUrl = coverArr.length > 0 ? (coverArr[coverArr.length-1].link || coverArr[coverArr.length-1].url) : 'https://via.placeholder.com/500?text=Album';
+    const imgUrl = currentViewedAlbumMeta.image[0].url || 'https://via.placeholder.com/500?text=Album';
     albumHeroImage.src = imgUrl;
     
-    const aName = decodeHTML(albumData.name || albumData.title);
+    const aName = decodeHTML(currentViewedAlbumMeta.name);
     detailAlbumTitleHero.textContent = aName;
     stickyAlbumTitle.textContent = aName;
     
@@ -1740,11 +1837,64 @@ async function openAlbumDetail(albumId) {
     stickyAlbumPlayBtn.style.pointerEvents = 'none';
     stickyAlbumPlayBtn.style.transform = 'translateY(10px)';
     
-    const count = albumData.songCount || (albumData.songs && albumData.songs.length) || 0;
-    const year = albumData.year ? ` • ${albumData.year}` : '';
+    const count = appleSongs.length;
+    const year = albumMeta.releaseDate ? ` • ${albumMeta.releaseDate.substring(0,4)}` : '';
     detailAlbumInfo.textContent = `${count} cancion${count !== 1 ? 'es' : ''}${year}`;
     
-    currentAlbumQueue = albumData.songs || [];
+    // Convert Apple Songs to Standard Queue Format, missing Audio for now
+    currentAlbumQueue = appleSongs.map(itrack => {
+        return {
+             id: itrack.trackId.toString(),
+             name: itrack.trackName,
+             title: itrack.trackName,
+             primaryArtists: itrack.artistName,
+             primaryArtistsId: (itrack.artistId || '').toString(),
+             image: [ { quality: '500x500', url: (itrack.artworkUrl100 || '').replace('100x100', '500x500') } ],
+             downloadUrl: [],
+             previewUrl: itrack.previewUrl || '',
+             playCount: 0,
+             album: { name: itrack.collectionName || '', id: itrack.collectionId || '' },
+             isPreview: true // Flag as preview until JioSaavn resolves it
+        };
+    });
+    
+    // Background Audio Resolver from JioSaavn
+    if (currentAlbumQueue.length > 0) {
+        currentAlbumQueue.forEach(async (track, idx) => {
+            const cleanArtist = track.primaryArtists.split(',')[0].trim();
+            const safeSearch = `${track.name} ${cleanArtist}`.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9\s-]/g, '');
+            const q1 = encodeURIComponent(safeSearch);
+            
+            try {
+                const jRes = await fetch(`https://jiosaavn-api-privatecvc2.vercel.app/search/songs?query=${q1}&limit=5`);
+                if (jRes.ok) {
+                    const jData = await jRes.json();
+                    let hits = [];
+                    if (jData.data && jData.data.results) hits = jData.data.results;
+                    else if (jData.results) hits = jData.results;
+                    
+                    if (hits.length > 0) {
+                        const validHits = hits.filter(h => passesStrictFilters(h, cleanArtist, track.name));
+                        if (validHits.length > 0) {
+                            validHits.sort((a,b) => b.playCount - a.playCount);
+                            const bestAudio = getBestAudioUrl(validHits[0].downloadUrl);
+                            if (bestAudio) {
+                                currentAlbumQueue[idx].downloadUrl = [{quality: '320kbps', url: bestAudio}];
+                                currentAlbumQueue[idx].previewUrl = bestAudio;
+                                currentAlbumQueue[idx].isPreview = false;
+                                
+                                // Clean up the preview tag in UI immediately if visible
+                                const tag = document.querySelector(`.album-track-${track.id} .preview-tag`);
+                                if (tag) tag.remove();
+                            }
+                        }
+                    }
+                }
+            } catch(e){}
+        });
+    }
+    
+    currentViewedAlbumMeta.songs = currentAlbumQueue;
     renderAlbumSongs();
     
     updatePlayState(!audioPlayer.paused);
@@ -1761,16 +1911,19 @@ function renderAlbumSongs() {
         const artistName = decodeHTML(track.primaryArtists || track.singers || "Artista Desconocido");
         const trackName = decodeHTML(track.name || track.title);
         
-        const artistHtml = buildArtistHtml(
-            decodeHTML(track.primaryArtists || track.singers || 'Artista Desconocido'),
-            track.primaryArtistsId || track.artistId || ''
-        );
+        const artistId = (track.primaryArtistsId || '').split(',')[0].trim() || (track.artistId || '').split(',')[0].trim();
+        let artistHtml = `<p>${artistName}</p>`;
+        if (artistId) {
+            artistHtml = `<p><span class="artist-link" data-artist-id="${artistId}" style="cursor: pointer;">${artistName}</span></p>`;
+        }
+        
+        const previewBadge = track.isPreview ? ` <span class="preview-tag" style="background: rgba(255,0,0,0.2); color: #ff6b6b; padding: 2px 6px; border-radius: 4px; font-size: 10px; margin-left: 8px; vertical-align: middle; white-space: nowrap;">Loading HQ...</span>` : '';
         
         const item = document.createElement('div');
-        item.className = 'song-item';
+        item.className = `song-item album-track-${track.id}`;
         item.innerHTML = `
             <div class="song-info" style="margin-left: 10px;">
-                <h4 style="font-size: 16px;">${index + 1}. ${trackName}</h4>
+                <h4 style="font-size: 16px;">${index + 1}. ${trackName}${previewBadge}</h4>
                 ${artistHtml}
             </div>
             <div class="song-actions">
@@ -1913,13 +2066,10 @@ async function playTrack(index, queueArray = null, autoPlay = true, resumeTime =
         fullArtist.textContent = artistName;
     }
     
-    // Resolve Audio URL Dynamic Fallback
-    let audioUrl = '';
-    if (track.downloadUrl && track.downloadUrl.length > 0) {
-        const aObj = track.downloadUrl.find(url => url.quality && url.quality.includes('320')) || track.downloadUrl[track.downloadUrl.length - 1];
-        audioUrl = aObj ? (aObj.url || aObj.link) : '';
-    }
+    // Resolve Audio URL
+    let audioUrl = getBestAudioUrl(track.downloadUrl);
     
+    // Legacy Playlist Fallback: If track has no downloadUrl (old v1 playlist format)
     if (!audioUrl) {
         try {
             const cleanArtist = artistName.split(',')[0].trim();
@@ -1946,14 +2096,12 @@ async function playTrack(index, queueArray = null, autoPlay = true, resumeTime =
             }
             
             if (hits && hits.length > 0) {
-                // Heuristic audio selection to avoid playing unrelated proxy content
-                const cleanA = artistName.split(',')[0].trim();
-                hits.sort((a,b) => getTrackScore(b.name || b.title, b.primaryArtists || b.singers, cleanA, trackName, b.playCount) - getTrackScore(a.name || a.title, a.primaryArtists || a.singers, cleanA, trackName, a.playCount));
+                const validHits = hits.filter(h => passesStrictFilters(h, cleanArtist, trackName));
                 
-                const aObj = hits[0].downloadUrl && Array.isArray(hits[0].downloadUrl) ? (hits[0].downloadUrl.find(url => url.quality && url.quality.includes('320')) || hits[0].downloadUrl[hits[0].downloadUrl.length - 1]) : null;
-                if (aObj) {
-                    audioUrl = aObj.url || aObj.link;
-                    track.downloadUrl = hits[0].downloadUrl; // Cache to prevent re-fetch
+                if (validHits.length > 0) {
+                    validHits.sort((a,b) => b.playCount - a.playCount);
+                    audioUrl = getBestAudioUrl(validHits[0].downloadUrl);
+                    if (audioUrl) track.downloadUrl = validHits[0].downloadUrl; // Cache internally
                 }
             }
         } catch(e) { console.warn("Headless Audio Extraction Failed"); }
@@ -2173,11 +2321,19 @@ _silentAudio.src = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAgD4AAA
 _silentAudio.volume = 0.001;
 
 let _keepAliveTimer = null;
-const KEEPALIVE_LIMIT_MS = 5 * 60 * 1000; // 5 minutes
+const KEEPALIVE_LIMIT_MS = 15 * 60 * 1000; // 15 minutes limit for iOS pause state
 
 function startKeepAlive() {
     stopKeepAlive();
-    _silentAudio.play().catch(() => {});
+    
+    // Attempting to play silent audio must happen directly in a microtask/sync flow of user gesture
+    const playPromise = _silentAudio.play();
+    if (playPromise !== undefined) {
+        playPromise.catch(() => {
+            // Browsers may block this if not directly attached to gesture, but we try
+        });
+    }
+    
     _keepAliveTimer = setTimeout(stopKeepAlive, KEEPALIVE_LIMIT_MS);
 }
 
@@ -2201,8 +2357,10 @@ document.addEventListener('visibilitychange', () => {
 window.addEventListener('beforeunload', () => savePlaybackState());
 
 audioPlayer.addEventListener('pause', () => {
-    // Note: keepalive is started in togglePlay() directly (user gesture)
-    // This handles pauses from other sources (e.g. Media Session handler)
+    // If native OS paused the player (e.g. pulling out headphones), we MUST start keepalive
+    // to prevent instant PWA death within 10s on iOS.
+    startKeepAlive();
+    
     if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused';
     savePlaybackState();
     updateMediaSessionPosition();
@@ -2268,7 +2426,8 @@ function setupMediaSession(title, artist, album, smallArtwork, largeArtwork) {
         });
         
         navigator.mediaSession.setActionHandler('pause', () => {
-            startKeepAlive(); // Lock screen pause also needs keepalive
+            // Lock screen pause MUST trigger keepalive synchronously
+            startKeepAlive(); 
             audioPlayer.pause();
             navigator.mediaSession.playbackState = 'paused';
             updatePlayState(false);
