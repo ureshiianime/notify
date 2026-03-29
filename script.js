@@ -40,6 +40,17 @@ const playAllArtistBtn = document.getElementById('playAllArtistBtn');
 const shuffleArtistBtn = document.getElementById('shuffleArtistBtn');
 const artistSongsContainer = document.getElementById('artistSongsContainer');
 const artistControlsRow = document.getElementById('artistControlsRow');
+const artistSongsShowAllWrapper = document.getElementById('artistSongsShowAllWrapper');
+const showAllArtistSongsBtn = document.getElementById('showAllArtistSongsBtn');
+
+// All Artist Songs UI Elements
+const allArtistSongsView = document.getElementById('allArtistSongsView');
+const backFromAllSongsBtn = document.getElementById('backFromAllSongsBtn');
+const allSongsArtistTitle = document.getElementById('allSongsArtistTitle');
+const allArtistSongsMain = document.getElementById('allArtistSongsMain');
+const allArtistSongsListContainer = document.getElementById('allArtistSongsListContainer');
+const allArtistSongsLoader = document.getElementById('allArtistSongsLoader');
+const allArtistSongsFilterInput = document.getElementById('allArtistSongsFilterInput');
 
 // Home View Elements
 const homeUserPlaylists = document.getElementById('homeUserPlaylists');
@@ -147,6 +158,13 @@ let isFetchingArtistAlbums = false;
 let hasMoreArtistAlbums = true;
 let currentArtistIdForAlbums = null;
 
+// All Artist Songs Pagination State
+let currentAllArtistSongsPage = 1;
+let isFetchingAllArtistSongs = false;
+let hasMoreAllArtistSongs = true;
+let currentArtistIdForAllSongs = null;
+let currentAllArtistSongsData = [];
+
 let playlists = JSON.parse(localStorage.getItem('webMusicPlaylists')) || [];
 let trackToAdd = null; 
 let currentViewedPlaylist = null;
@@ -245,6 +263,7 @@ function switchView(viewId) {
     playlistDetailView.style.display = 'none';
     artistDetailView.style.display = 'none';
     if(albumDetailView) albumDetailView.style.display = 'none';
+    if(allArtistSongsView) allArtistSongsView.style.display = 'none';
     homeView.style.display = 'none';
     
     if(mainHeader) mainHeader.style.display = 'block';
@@ -284,6 +303,10 @@ function switchView(viewId) {
         if(albumDetailView) albumDetailView.style.display = 'flex';
         if(mainHeader) mainHeader.style.display = 'none';
         createNewPlaylistBtn.style.display = 'none';
+    } else if (viewId === 'allArtistSongs') {
+        if(allArtistSongsView) allArtistSongsView.style.display = 'flex';
+        if(mainHeader) mainHeader.style.display = 'none';
+        createNewPlaylistBtn.style.display = 'none';
     }
 }
 
@@ -293,6 +316,7 @@ tabPlaylists.addEventListener('click', () => switchView('playlists'));
 backToPlaylistsBtn.addEventListener('click', () => switchView('playlists'));
 if(backFromArtistBtn) backFromArtistBtn.addEventListener('click', () => switchView('search'));
 if(backFromAlbumBtn) backFromAlbumBtn.addEventListener('click', () => switchView('artistDetail'));
+if(backFromAllSongsBtn) backFromAllSongsBtn.addEventListener('click', () => switchView('artistDetail'));
 
 // --- Playlists Feature ---
 function generatePlaylistCoverHTML(playlist, isCard = false) {
@@ -467,7 +491,7 @@ function renderPlaylistSongs(tracksToRender) {
         item.addEventListener('click', (e) => {
             if (e.target.classList.contains('artist-link')) {
                 e.stopPropagation();
-                openArtistDetail(e.target.getAttribute('data-artist-id'));
+                openArtistDetail(e.target.getAttribute('data-artist-id'), e.target.textContent);
                 return;
             }
             if(!e.target.closest('.remove-from-playlist')) {
@@ -1447,7 +1471,7 @@ function appendResults(newTracks, startIndex) {
         item.addEventListener('click', (e) => {
             if (e.target.classList.contains('artist-link')) {
                 e.stopPropagation();
-                openArtistDetail(e.target.getAttribute('data-artist-id'));
+                openArtistDetail(e.target.getAttribute('data-artist-id'), e.target.textContent);
                 return;
             }
             // Only play if they didn't click inside the actions container
@@ -1582,23 +1606,41 @@ function renderArtistsScroll(artists) {
     searchResults.appendChild(scrollContainer);
 }
 
-async function openArtistDetail(artistId) {
+async function openArtistDetail(artistId, artistNameFallback = '') {
     switchView('artistDetail');
     artistSongsContainer.innerHTML = '<div class="bottom-loader" style="padding: 20px; text-align: center; color: var(--text-secondary);"><i class="fa-solid fa-circle-notch fa-spin"></i> Cargando artista desde Apple...</div>';
     
     artistHeroImage.src = '';
     detailArtistTitleHero.textContent = '';
-    detailArtistInfo.textContent = 'Calculando oyentes...';
+    detailArtistInfo.textContent = 'Cargando...';
     stickyArtistTitle.textContent = '';
     stickyArtistTitle.style.opacity = '0';
     stickyArtistPlayBtn.style.opacity = '0';
     stickyArtistPlayBtn.style.pointerEvents = 'none';
     stickyArtistPlayBtn.style.transform = 'translateY(10px)';
+    if(artistSongsShowAllWrapper) artistSongsShowAllWrapper.style.display = 'none';
     
     try {
-        const u = `https://itunes.apple.com/lookup?id=${artistId}&entity=song&limit=30`;
-        const res = await fetch(u);
-        const data = await res.json();
+        let u = `https://itunes.apple.com/lookup?id=${artistId}&entity=song&limit=30`;
+        let res = await fetch(u);
+        let data = await res.json();
+        
+        if (!data.results || data.results.length === 0) {
+            // Failsafe: Si el ID era de JioSaavn y falló en Apple, buscamos el artista por su nombre exacto.
+            if (artistNameFallback) {
+                const searchQ = encodeURIComponent(artistNameFallback);
+                const sUrl = `https://itunes.apple.com/search?term=${searchQ}&entity=musicArtist&limit=1`;
+                const sRes = await fetch(sUrl);
+                const sData = await sRes.json();
+                
+                if (sData.results && sData.results.length > 0) {
+                    const trueArtistId = sData.results[0].artistId;
+                    u = `https://itunes.apple.com/lookup?id=${trueArtistId}&entity=song&limit=30`;
+                    res = await fetch(u);
+                    data = await res.json();
+                }
+            }
+        }
         
         if (!data.results || data.results.length === 0) throw new Error("Artista no encontrado en iTunes.");
         
@@ -1634,7 +1676,16 @@ async function openArtistDetail(artistId) {
                  } else {
                      detailArtistInfo.textContent = `Artista Oficial`;
                  }
-             }).catch(()=>{detailArtistInfo.textContent = `Artista Oficial`;});
+                 
+                 if (match && match.id) {
+                     currentArtistIdForAllSongs = { type: 'id', value: match.id };
+                 } else {
+                     currentArtistIdForAllSongs = { type: 'query', value: aName };
+                 }
+             }).catch(()=>{
+                 detailArtistInfo.textContent = `Artista Oficial`;
+                 currentArtistIdForAllSongs = { type: 'query', value: aName };
+             });
              
              const jioSongsRes = await fetch(`https://jiosaavn-api-privatecvc2.vercel.app/search/songs?query=${encodeURIComponent(aName)}&limit=50`);
              const jioSongsData = await jioSongsRes.json();
@@ -1643,7 +1694,28 @@ async function openArtistDetail(artistId) {
         } catch(e) {}
              
         // 2. Strict Filtration Wall (Language, Correct Artist, Prohibited terms)
-        const validTracks = jioTracks.filter(jt => passesStrictFilters(jt, aName, ''));
+        let validTracks = jioTracks.filter(jt => passesStrictFilters(jt, aName, ''));
+        
+        // Failsafe: Si la búsqueda general no dio canciones válidas (error de coincidencia genérica),
+        // buscamos individualmente las canciones de Apple Music para forzar resultados válidos.
+        if (validTracks.length === 0 && songsData && songsData.length > 0) {
+            const trackNamesToTry = songsData.slice(0, 5).map(t => t.trackName);
+            for (let tName of trackNamesToTry) {
+                try {
+                    const fallbackQuery = aName + " " + tName;
+                    const fallbackRes = await fetch(`https://jiosaavn-api-privatecvc2.vercel.app/search/songs?query=${encodeURIComponent(fallbackQuery)}&limit=5`);
+                    const fallbackData = await fallbackRes.json();
+                    let hits = [];
+                    if (fallbackData.data && fallbackData.data.results) hits = fallbackData.data.results;
+                    else if (fallbackData.results) hits = fallbackData.results;
+                    
+                    const bestHit = hits.find(h => passesStrictFilters(h, aName, ''));
+                    if (bestHit && !validTracks.some(v => v.id === bestHit.id)) {
+                        validTracks.push(bestHit);
+                    }
+                } catch(e){}
+            }
+        }
         
         // 3. Format Tracks & Extract Highest Quality Audio (320kbps prioritized)
         currentArtistQueue = validTracks.slice(0, 30).map(jt => {
@@ -1682,6 +1754,12 @@ async function openArtistDetail(artistId) {
         }
         
         renderArtistSongs();
+        
+        if (currentArtistQueue.length > 5) {
+            artistSongsShowAllWrapper.style.display = 'flex';
+        } else {
+            artistSongsShowAllWrapper.style.display = 'none';
+        }
         
         currentArtistIdForAlbums = artistId;
         currentArtistAlbumPage = 1;
@@ -1806,7 +1884,7 @@ function renderArtistSongs() {
         item.addEventListener('click', (e) => {
             if (e.target.classList.contains('artist-link')) {
                 e.stopPropagation();
-                openArtistDetail(e.target.getAttribute('data-artist-id'));
+                openArtistDetail(e.target.getAttribute('data-artist-id'), e.target.textContent);
                 return;
             }
             if (!e.target.closest('.song-actions')) {
@@ -2029,7 +2107,7 @@ function renderAlbumSongs() {
         item.addEventListener('click', (e) => {
             if (e.target.classList.contains('artist-link')) {
                 e.stopPropagation();
-                openArtistDetail(e.target.getAttribute('data-artist-id'));
+                openArtistDetail(e.target.getAttribute('data-artist-id'), e.target.textContent);
                 return;
             }
             if (!e.target.closest('.song-actions')) {
@@ -2701,10 +2779,195 @@ fullArtist.addEventListener('click', (e) => {
             if (fullPlayer && fullPlayer.classList.contains('active')) {
                 fullPlayer.classList.remove('active');
             }
-            openArtistDetail(aid);
+            openArtistDetail(aid, e.target.textContent);
         }
     }
 });
+
+// --- All Artist Songs View Engine ---
+showAllArtistSongsBtn.addEventListener('click', () => {
+    switchView('allArtistSongs');
+    allSongsArtistTitle.textContent = detailArtistTitleHero.textContent;
+    allArtistSongsListContainer.innerHTML = '';
+    currentAllArtistSongsPage = 1;
+    hasMoreAllArtistSongs = true;
+    currentAllArtistSongsData = [];
+    if(allArtistSongsFilterInput) allArtistSongsFilterInput.value = '';
+    allArtistSongsLoader.style.display = 'block';
+    
+    fetchNextAllArtistSongs();
+});
+
+async function fetchNextAllArtistSongs() {
+    if (isFetchingAllArtistSongs || !hasMoreAllArtistSongs || !currentArtistIdForAllSongs) return;
+    isFetchingAllArtistSongs = true;
+    allArtistSongsLoader.style.display = 'block';
+    
+    try {
+        let apiUrl = '';
+        const searchVal = currentArtistIdForAllSongs.type === 'id' ? detailArtistTitleHero.textContent : currentArtistIdForAllSongs.value;
+        apiUrl = `https://jiosaavn-api-privatecvc2.vercel.app/search/songs?query=${encodeURIComponent(searchVal)}&page=${currentAllArtistSongsPage}&limit=30`;
+        
+        const res = await fetch(apiUrl);
+        const data = await res.json();
+        
+        let newHits = [];
+        if (data.data && data.data.results) newHits = data.data.results;
+        else if (data.data && Array.isArray(data.data)) newHits = data.data;
+        else if (data.results) newHits = data.results;
+        
+        if (!newHits || newHits.length === 0) {
+            hasMoreAllArtistSongs = false;
+        } else {
+            // Apply strict filters
+            const aName = detailArtistTitleHero.textContent;
+            let validTracks = newHits.filter(jt => passesStrictFilters(jt, aName, ''));
+            // Sometimes all tracks on a page are filtered out. We still need to increment page.
+            
+            if (validTracks.length > 0) {
+                const newFormattedTracks = validTracks.map(jt => {
+                    const rawAudioUrl = getBestAudioUrl(jt.downloadUrl) || '';
+                    return {
+                        id: jt.id.toString(),
+                        name: decodeHTML(jt.name || jt.title),
+                        title: decodeHTML(jt.name || jt.title),
+                        primaryArtists: decodeHTML(jt.primaryArtists || jt.singers),
+                        primaryArtistsId: (jt.primaryArtistsId || '').toString(),
+                        image: jt.image || [{ quality: '150x150', url: 'https://via.placeholder.com/150' }],
+                        downloadUrl: rawAudioUrl ? [{quality: '320kbps', url: rawAudioUrl}] : [],
+                        previewUrl: rawAudioUrl,
+                        playCount: Number(jt.playCount || 0),
+                        album: { name: decodeHTML((jt.album && jt.album.name) || ''), id: (jt.album && jt.album.id) || '' },
+                        isPreview: !rawAudioUrl,
+                        duration: jt.duration ? jt.duration.toString() : "0"
+                    };
+                });
+                
+                // Fetch high res artwork in background
+                enhanceWithAppleArtwork(newFormattedTracks);
+                
+                currentAllArtistSongsData = currentAllArtistSongsData.concat(newFormattedTracks);
+                
+                const q = (allArtistSongsFilterInput.value || '').toLowerCase().trim();
+                if (q) {
+                    const validChunk = newFormattedTracks.filter(t => {
+                        const title = (t.name || t.title || '').toLowerCase();
+                        const artist = (t.primaryArtists || t.singers || '').toLowerCase();
+                        return title.includes(q) || artist.includes(q);
+                    });
+                    renderAllArtistSongsChunk(validChunk);
+                } else {
+                    renderAllArtistSongsChunk(newFormattedTracks);
+                }
+            }
+            currentAllArtistSongsPage++;
+        }
+    } catch(e) {
+        console.error("Error fetching all artist songs page", e);
+    }
+    
+    isFetchingAllArtistSongs = false;
+    allArtistSongsLoader.style.display = hasMoreAllArtistSongs ? 'none' : 'none';
+}
+
+function enhanceWithAppleArtwork(localTracks) {
+    if (localTracks.length === 0) return;
+    
+    // Quick async background fetch to find Apple Music artwork for these tracks
+    localTracks.forEach(async (localTrack) => {
+        try {
+            const safeSearch = encodeURIComponent(localTrack.name + " " + localTrack.primaryArtists.split(',')[0]);
+            const res = await fetch(`https://itunes.apple.com/search?term=${safeSearch}&entity=song&limit=1`);
+            const data = await res.json();
+            if (data.results && data.results.length > 0 && data.results[0].artworkUrl100) {
+                localTrack.image = [ { quality: '500x500', url: data.results[0].artworkUrl100.replace('100x100', '500x500') } ];
+                // Force an image update on DOM
+                const imgEl = document.getElementById(`all-song-img-${localTrack.id}`);
+                if (imgEl) imgEl.src = localTrack.image[0].url;
+            }
+        } catch(e) {}
+    });
+}
+
+function renderAllArtistSongsChunk(tracksToRender) {
+    tracksToRender.forEach((track) => {
+        const artworkObj = track.image.find(img => img.quality && img.quality.includes('150')) || track.image[0];
+        const smallArtworkUrl = artworkObj ? (artworkObj.url || artworkObj.link) : 'https://via.placeholder.com/150';
+        const artistName = decodeHTML(track.primaryArtists);
+        const trackName = decodeHTML(track.title);
+        const artistId = (track.primaryArtistsId || '').split(',')[0].trim();
+        
+        let artistHtml = `<p>${artistName}</p>`;
+        if (artistId) {
+            artistHtml = `<p><span class="artist-link" data-artist-id="${artistId}" style="cursor: pointer;">${artistName}</span></p>`;
+        }
+        
+        const item = document.createElement('div');
+        item.className = 'song-item';
+        item.innerHTML = `
+            <img id="all-song-img-${track.id}" src="${smallArtworkUrl}" alt="Cover" loading="lazy">
+            <div class="song-info">
+                <h4>${trackName}</h4>
+                ${artistHtml}
+            </div>
+            <div class="song-actions">
+                ${getTrackAddButtonHTML(track)}
+            </div>
+        `;
+        
+        item.addEventListener('click', (e) => {
+            if (e.target.classList.contains('artist-link')) {
+                e.stopPropagation();
+                openArtistDetail(e.target.getAttribute('data-artist-id'), e.target.textContent);
+                return;
+            }
+            if(!e.target.closest('.song-actions')) {
+                // Determine actual index
+                const realIndex = currentAllArtistSongsData.findIndex(t => t.id === track.id);
+                if (realIndex !== -1) {
+                    activeContextId = "allArtistSongs";
+                    playTrack(realIndex, currentAllArtistSongsData.slice());
+                }
+            }
+        });
+        
+        const addBtn = item.querySelector('.add-to-playlist-btn');
+        addBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            openAddModal(track);
+        });
+        
+        allArtistSongsListContainer.appendChild(item);
+    });
+}
+
+// Scroll Listener for Infinite Scroll
+allArtistSongsMain.addEventListener('scroll', () => {
+    if (allArtistSongsMain.scrollTop + allArtistSongsMain.clientHeight >= allArtistSongsMain.scrollHeight - 300) {
+        if (!isFetchingAllArtistSongs && hasMoreAllArtistSongs) {
+            fetchNextAllArtistSongs();
+        }
+    }
+});
+
+if (allArtistSongsFilterInput) {
+    allArtistSongsFilterInput.addEventListener('input', (e) => {
+        const q = e.target.value.toLowerCase().trim();
+        allArtistSongsListContainer.innerHTML = '';
+        
+        if (!q) {
+            renderAllArtistSongsChunk(currentAllArtistSongsData);
+            return;
+        }
+        
+        const filtered = currentAllArtistSongsData.filter(t => {
+            const title = (t.name || t.title || '').toLowerCase();
+            const artist = (t.primaryArtists || t.singers || '').toLowerCase();
+            return title.includes(q) || artist.includes(q);
+        });
+        renderAllArtistSongsChunk(filtered);
+    });
+}
 
 // Initial View Load
 switchView('home');
