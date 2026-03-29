@@ -16,10 +16,23 @@
     -webkit-tap-highlight-color: transparent;
 }
 
+html, body {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    overscroll-behavior: none;
+}
+
 body {
     background-color: var(--bg-color);
     color: var(--text-primary);
-    overscroll-behavior-y: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
 }
 
 img {
@@ -95,6 +108,8 @@ img {
 .main-content {
     flex: 1;
     overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: none;
     padding: 10px 20px 180px; /* space for mini player plus bottom nav */
     padding-bottom: calc(180px + env(safe-area-inset-bottom));
 }
@@ -192,6 +207,8 @@ img {
     display: flex;
     gap: 15px;
     overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: none;
     padding-bottom: 10px;
     scroll-snap-type: x mandatory;
     scrollbar-width: none; /* Firefox */
@@ -874,6 +891,8 @@ img {
 .modal-body {
     flex: 1;
     overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: none;
     margin-bottom: 20px;
 }
 
