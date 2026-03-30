@@ -2635,17 +2635,7 @@ function setupMediaSession(title, artist, album, smallArtwork, largeArtwork) {
                 }
             });
             
-            navigator.mediaSession.setActionHandler('seekbackward', (details) => {
-                const skipTime = details.seekOffset || 10;
-                audioPlayer.currentTime = Math.max(audioPlayer.currentTime - skipTime, 0);
-                updateMediaSessionPosition();
-            });
-
-            navigator.mediaSession.setActionHandler('seekforward', (details) => {
-                const skipTime = details.seekOffset || 10;
-                audioPlayer.currentTime = Math.min(audioPlayer.currentTime + skipTime, audioPlayer.duration);
-                updateMediaSessionPosition();
-            });
+            // Note: seekbackward/seekforward removed to prioritize Next/Previous buttons on iOS lockscreen
         } catch (e) {
             console.warn("Seeking action handlers not supported", e);
         }
