@@ -2202,7 +2202,7 @@ saveAlbumBtn.addEventListener('click', () => {
 async function playTrack(index, queueArray = null, autoPlay = true, resumeTime = 0) {
     currentPlayRequestId++;
     const sessionId = currentPlayRequestId;
-    
+
     // Warm up/Claim audio element immediately in sync context for iOS
     audioPlayer.load();
 
@@ -2499,16 +2499,21 @@ const KEEPALIVE_LIMIT_MS = 15 * 60 * 1000; // 15 minutes limit for iOS pause sta
 
 function startKeepAlive() {
     stopKeepAlive();
+    
+    // Refresh src to ensure the stream isn't 'stale' for iOS
+    _silentAudio.src = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAgD4AAAB9AAACABAA' +
+        'ZGF0YQAAAAA=';
+    _silentAudio.loop = true;
 
-    // Attempting to play silent audio must happen directly in a microtask/sync flow of user gesture
     const playPromise = _silentAudio.play();
     if (playPromise !== undefined) {
         playPromise.catch(() => {
-            // Browsers may block this if not directly attached to gesture, but we try
+            // Attempt recovery: browsers may block, but we try again on any interaction
         });
     }
-
-    _keepAliveTimer = setTimeout(stopKeepAlive, KEEPALIVE_LIMIT_MS);
+    
+    // Extend survival time to 30 mins
+    _keepAliveTimer = setTimeout(stopKeepAlive, 30 * 60 * 1000);
 }
 
 function stopKeepAlive() {
@@ -2539,7 +2544,7 @@ audioPlayer.addEventListener('pause', () => {
     // to prevent instant PWA death within 10s on iOS.
     startKeepAlive();
     updatePlayState(false);
-    
+
     if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused';
     savePlaybackState();
     updateMediaSessionPosition();
@@ -2554,6 +2559,13 @@ audioPlayer.addEventListener('seeked', () => {
     savePlaybackState();
     updateMediaSessionPosition();
 });
+
+// Periodic save while playing (every 10s instead of 5s filter)
+setInterval(() => {
+    if (currentIndex !== -1 && !audioPlayer.paused) {
+        savePlaybackState();
+    }
+}, 10000);
 
 audioPlayer.addEventListener('loadedmetadata', () => {
     durationTimeEl.textContent = formatTime(audioPlayer.duration);
