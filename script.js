@@ -3115,7 +3115,7 @@ if (monoAudioToggle) {
     monoAudioToggle.addEventListener('change', (e) => {
         userProfile.monoAudio = e.target.checked;
         saveUserProfile();
-        initAudioRouting();
+        unlockAudioContext();
         applyMonoSetting();
     });
 }
@@ -3125,38 +3125,56 @@ let audioCtx = null;
 let sourceNode = null;
 let splitter = null;
 let merger = null;
+let audioUnlocked = false;
 
-function initAudioRouting() {
-    if (audioCtx) return;
-    try {
-        const AudioContext = window.AudioContext || window.webkitAudioContext;
-        audioCtx = new AudioContext();
-        
-        sourceNode = audioCtx.createMediaElementSource(audioPlayer);
-        
-        splitter = audioCtx.createChannelSplitter(2);
-        merger = audioCtx.createChannelMerger(2);
-        
-        // Mono mixdown: L -> L, L -> R, R -> L, R -> R
-        splitter.connect(merger, 0, 0); 
-        splitter.connect(merger, 0, 1);
-        splitter.connect(merger, 1, 0);
-        splitter.connect(merger, 1, 1);
-        
-        applyMonoSetting();
-    } catch (e) {
-        console.warn('Web Audio API not supported or failed to init', e);
+// We must create or resume the AudioContext on a DIRECT user gesture 
+// otherwise iOS Safari will suspend it permanently, causing silence.
+function unlockAudioContext() {
+    if (!userProfile.monoAudio) return; // Only instantiate if needed to save resources
+
+    if (!audioCtx) {
+        try {
+            const AudioContext = window.AudioContext || window.webkitAudioContext;
+            audioCtx = new AudioContext();
+            
+            // Re-apply CORS otherwise Safari might still restrict manipulation 
+            // if we don't have it, but wait, setting it dynamically might crash playback.
+            // Let's just create the nodes.
+            sourceNode = audioCtx.createMediaElementSource(audioPlayer);
+            splitter = audioCtx.createChannelSplitter(2);
+            merger = audioCtx.createChannelMerger(2);
+            
+            splitter.connect(merger, 0, 0); 
+            splitter.connect(merger, 0, 1);
+            splitter.connect(merger, 1, 0);
+            splitter.connect(merger, 1, 1);
+            
+            applyMonoSetting();
+        } catch (e) {
+            console.warn('Web Audio API no soportada', e);
+            return;
+        }
+    }
+
+    if (audioCtx && audioCtx.state === 'suspended') {
+        audioCtx.resume().then(() => {
+            audioUnlocked = true;
+        });
+    } else {
+        audioUnlocked = true;
     }
 }
 
+// Global unlockers for iOS Safari
+document.addEventListener('click', unlockAudioContext, { once: false });
+document.addEventListener('touchstart', unlockAudioContext, { once: false });
+
 function applyMonoSetting() {
     if (!audioCtx || !sourceNode) return;
-    if (audioCtx.state === 'suspended') {
-        audioCtx.resume();
-    }
     
     sourceNode.disconnect();
     try { merger.disconnect(); } catch(e){}
+    try { audioCtx.destination.disconnect(); } catch(e){}
     
     if (userProfile.monoAudio) {
         sourceNode.connect(splitter);
@@ -3165,14 +3183,6 @@ function applyMonoSetting() {
         sourceNode.connect(audioCtx.destination);
     }
 }
-
-// Re-hook audioPlayer play to init routing lazily ONLY si es necesario
-audioPlayer.addEventListener('play', () => {
-    if (userProfile.monoAudio) {
-        initAudioRouting();
-        if(audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
-    }
-});
 
 // Load settings on boot
 loadUserProfileUI();
