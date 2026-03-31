@@ -3121,16 +3121,20 @@ if (monoAudioToggle) {
 }
 
 // Audio Routing state
-let audioCtx;
-let sourceNode;
-let splitter;
-let merger;
+let audioCtx = null;
+let sourceNode = null;
+let splitter = null;
+let merger = null;
 
 function initAudioRouting() {
     if (audioCtx) return;
     try {
         const AudioContext = window.AudioContext || window.webkitAudioContext;
         audioCtx = new AudioContext();
+        
+        // Configurar CORS
+        audioPlayer.crossOrigin = "anonymous";
+        
         sourceNode = audioCtx.createMediaElementSource(audioPlayer);
         
         splitter = audioCtx.createChannelSplitter(2);
@@ -3165,10 +3169,12 @@ function applyMonoSetting() {
     }
 }
 
-// Re-hook audioPlayer play to init routing lazily
+// Re-hook audioPlayer play to init routing lazily ONLY si es necesario
 audioPlayer.addEventListener('play', () => {
-    initAudioRouting();
-    if(audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+    if (userProfile.monoAudio) {
+        initAudioRouting();
+        if(audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+    }
 });
 
 // Load settings on boot
