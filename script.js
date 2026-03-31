@@ -13,6 +13,25 @@ const playlistsView = document.getElementById('playlistsView');
 const playlistDetailView = document.getElementById('playlistDetailView');
 const artistDetailView = document.getElementById('artistDetailView');
 const albumDetailView = document.getElementById('albumDetailView');
+const settingsView = document.getElementById('settingsView');
+
+// Settings UI Elements
+const headerProfileBtn = document.getElementById('headerProfileBtn');
+const headerProfileImg = document.getElementById('headerProfileImg');
+const backFromSettingsBtn = document.getElementById('backFromSettingsBtn');
+const settingsProfileImg = document.getElementById('settingsProfileImg');
+const editProfileImgBtn = document.getElementById('editProfileImgBtn');
+const profileImgInput = document.getElementById('profileImgInput');
+const settingsProfileNameDisplay = document.getElementById('settingsProfileNameDisplay');
+const editProfileNameBtn = document.getElementById('editProfileNameBtn');
+const profileNameDisplayContainer = document.getElementById('profileNameDisplayContainer');
+const editProfileNameContainer = document.getElementById('editProfileNameContainer');
+const settingsProfileNameInput = document.getElementById('settingsProfileNameInput');
+const saveProfileNameBtn = document.getElementById('saveProfileNameBtn');
+const cancelProfileNameBtn = document.getElementById('cancelProfileNameBtn');
+const dataQualitySelect = document.getElementById('dataQualitySelect');
+const wifiQualitySelect = document.getElementById('wifiQualitySelect');
+const monoAudioToggle = document.getElementById('monoAudioToggle');
 
 // Album UI Elements
 const backFromAlbumBtn = document.getElementById('backFromAlbumBtn');
@@ -265,6 +284,7 @@ function switchView(viewId) {
     artistDetailView.style.display = 'none';
     if (albumDetailView) albumDetailView.style.display = 'none';
     if (allArtistSongsView) allArtistSongsView.style.display = 'none';
+    if (settingsView) settingsView.style.display = 'none';
     homeView.style.display = 'none';
 
     if (mainHeader) mainHeader.style.display = 'block';
@@ -308,6 +328,10 @@ function switchView(viewId) {
         if (allArtistSongsView) allArtistSongsView.style.display = 'flex';
         if (mainHeader) mainHeader.style.display = 'none';
         createNewPlaylistBtn.style.display = 'none';
+    } else if (viewId === 'settings') {
+        if (settingsView) settingsView.style.display = 'flex';
+        if (mainHeader) mainHeader.style.display = 'none';
+        createNewPlaylistBtn.style.display = 'none';
     }
 }
 
@@ -318,6 +342,8 @@ backToPlaylistsBtn.addEventListener('click', () => switchView('playlists'));
 if (backFromArtistBtn) backFromArtistBtn.addEventListener('click', () => switchView('search'));
 if (backFromAlbumBtn) backFromAlbumBtn.addEventListener('click', () => switchView('artistDetail'));
 if (backFromAllSongsBtn) backFromAllSongsBtn.addEventListener('click', () => switchView('artistDetail'));
+if (headerProfileBtn) headerProfileBtn.addEventListener('click', () => switchView('settings'));
+if (backFromSettingsBtn) backFromSettingsBtn.addEventListener('click', () => switchView('home'));
 
 // --- Playlists Feature ---
 function generatePlaylistCoverHTML(playlist, isCard = false) {
@@ -1237,21 +1263,55 @@ function renderModalPlaylists() {
     });
 }
 
-// Helper: Resuelve la mejor URL de audio disponible (prioriza 320kbps)
+// Helper: Determinar el tipo de conexión red
+function getNetworkType() {
+    if (navigator.connection) {
+        if (navigator.connection.type === 'cellular') return 'cellular';
+        const effType = navigator.connection.effectiveType;
+        if (effType && (effType === 'slow-2g' || effType === '2g' || effType === '3g')) return 'cellular';
+    }
+    return 'wifi';
+}
+
+// Helper: Resuelve la URL de audio según la calidad configurada en ajustes
 function getBestAudioUrl(downloadUrlArray) {
     if (!downloadUrlArray || !Array.isArray(downloadUrlArray) || downloadUrlArray.length === 0) return null;
 
-    // Buscar preferiblemente la de 320kbps
-    const hd = downloadUrlArray.find(url => url.quality && url.quality.includes('320'));
-    if (hd && (hd.url || hd.link)) return hd.url || hd.link;
+    let targetQuality;
+    const netType = getNetworkType();
+    
+    // Obtenemos la configuración de calidad actual
+    const activeSetting = netType === 'cellular' ? (userProfile.dataQuality || 'normal') : (userProfile.wifiQuality || 'premium');
+    
+    switch (activeSetting) {
+        case 'low': targetQuality = '96'; break;
+        case 'normal': targetQuality = '160'; break;
+        case 'high': targetQuality = '320'; break;
+        case 'premium': targetQuality = 'premium'; break;
+        default: targetQuality = '160';
+    }
 
-    // Si no hay 320, buscar 160
-    const md = downloadUrlArray.find(url => url.quality && url.quality.includes('160'));
-    if (md && (md.url || md.link)) return md.url || md.link;
+    if (targetQuality === 'premium') {
+        const highest = downloadUrlArray[downloadUrlArray.length - 1];
+        if (highest && (highest.url || highest.link)) return highest.url || highest.link;
+    } else {
+        const exact = downloadUrlArray.find(url => url.quality && url.quality.includes(targetQuality));
+        if (exact && (exact.url || exact.link)) return exact.url || exact.link;
+        
+        // Fallbacks
+        const fb160 = downloadUrlArray.find(u => u.quality && u.quality.includes('160'));
+        if (targetQuality === '320' && fb160 && (fb160.url || fb160.link)) return fb160.url || fb160.link;
+        
+        const fb320 = downloadUrlArray.find(u => u.quality && u.quality.includes('320'));
+        if (targetQuality === '160' && fb320 && (fb320.url || fb320.link)) return fb320.url || fb320.link;
+        
+        const fb96 = downloadUrlArray.find(u => u.quality && u.quality.includes('96'));
+        if (fb96 && (fb96.url || fb96.link)) return fb96.url || fb96.link;
+    }
 
-    // Fallback: la última del array suele ser la de mayor calidad
-    const last = downloadUrlArray[downloadUrlArray.length - 1];
-    return last.url || last.link;
+    // Ultimate fallback
+    const fallback = downloadUrlArray[0];
+    return fallback ? (fallback.url || fallback.link) : null;
 }
 
 // --- Search API with Pagination ---
@@ -2499,7 +2559,7 @@ const KEEPALIVE_LIMIT_MS = 15 * 60 * 1000; // 15 minutes limit for iOS pause sta
 
 function startKeepAlive() {
     stopKeepAlive();
-    
+
     // Refresh src to ensure the stream isn't 'stale' for iOS
     _silentAudio.src = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAgD4AAAB9AAACABAA' +
         'ZGF0YQAAAAA=';
@@ -2511,7 +2571,7 @@ function startKeepAlive() {
             // Attempt recovery: browsers may block, but we try again on any interaction
         });
     }
-    
+
     // Extend survival time to 30 mins
     _keepAliveTimer = setTimeout(stopKeepAlive, 30 * 60 * 1000);
 }
@@ -2964,6 +3024,155 @@ if (allArtistSongsFilterInput) {
         renderAllArtistSongsChunk(filtered);
     });
 }
+
+// --- User Profile & Settings ---
+let userProfile = JSON.parse(localStorage.getItem('notifyUserProfile')) || {
+    name: 'Usuario',
+    image: 'logo.png',
+    dataQuality: 'normal',
+    wifiQuality: 'premium',
+    monoAudio: false
+};
+
+function saveUserProfile() {
+    localStorage.setItem('notifyUserProfile', JSON.stringify(userProfile));
+}
+
+function loadUserProfileUI() {
+    if (headerProfileImg) headerProfileImg.src = userProfile.image;
+    if (settingsProfileImg) settingsProfileImg.src = userProfile.image;
+    if (settingsProfileNameDisplay) settingsProfileNameDisplay.textContent = userProfile.name;
+    if (settingsProfileNameInput) settingsProfileNameInput.value = userProfile.name;
+    
+    if (dataQualitySelect) dataQualitySelect.value = userProfile.dataQuality;
+    if (wifiQualitySelect) wifiQualitySelect.value = userProfile.wifiQuality;
+    if (monoAudioToggle) monoAudioToggle.checked = userProfile.monoAudio;
+    
+    applyMonoSetting();
+}
+
+// Attach UI events
+if (editProfileImgBtn && profileImgInput) {
+    editProfileImgBtn.addEventListener('click', () => profileImgInput.click());
+    profileImgInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                userProfile.image = event.target.result;
+                saveUserProfile();
+                loadUserProfileUI();
+                showToast("Foto de perfil actualizada", "fa-camera");
+            };
+            reader.readAsDataURL(file);
+        }
+    });
+}
+
+if (editProfileNameBtn && profileNameDisplayContainer && editProfileNameContainer) {
+    editProfileNameBtn.addEventListener('click', () => {
+        profileNameDisplayContainer.style.display = 'none';
+        editProfileNameContainer.style.display = 'flex';
+        settingsProfileNameInput.focus();
+    });
+    
+    const saveName = () => {
+        const newName = settingsProfileNameInput.value.trim();
+        if (newName) {
+            userProfile.name = newName;
+            saveUserProfile();
+            loadUserProfileUI();
+            showToast("Nombre actualizado", "fa-user");
+        }
+        editProfileNameContainer.style.display = 'none';
+        profileNameDisplayContainer.style.display = 'flex';
+    };
+    
+    saveProfileNameBtn.addEventListener('click', saveName);
+    settingsProfileNameInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') saveName();
+    });
+    cancelProfileNameBtn.addEventListener('click', () => {
+        editProfileNameContainer.style.display = 'none';
+        profileNameDisplayContainer.style.display = 'flex';
+        settingsProfileNameInput.value = userProfile.name;
+    });
+}
+
+if (dataQualitySelect) {
+    dataQualitySelect.addEventListener('change', (e) => {
+        userProfile.dataQuality = e.target.value;
+        saveUserProfile();
+    });
+}
+if (wifiQualitySelect) {
+    wifiQualitySelect.addEventListener('change', (e) => {
+        userProfile.wifiQuality = e.target.value;
+        saveUserProfile();
+    });
+}
+if (monoAudioToggle) {
+    monoAudioToggle.addEventListener('change', (e) => {
+        userProfile.monoAudio = e.target.checked;
+        saveUserProfile();
+        initAudioRouting();
+        applyMonoSetting();
+    });
+}
+
+// Audio Routing state
+let audioCtx;
+let sourceNode;
+let splitter;
+let merger;
+
+function initAudioRouting() {
+    if (audioCtx) return;
+    try {
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        audioCtx = new AudioContext();
+        sourceNode = audioCtx.createMediaElementSource(audioPlayer);
+        
+        splitter = audioCtx.createChannelSplitter(2);
+        merger = audioCtx.createChannelMerger(2);
+        
+        // Mono mixdown: L -> L, L -> R, R -> L, R -> R
+        splitter.connect(merger, 0, 0); 
+        splitter.connect(merger, 0, 1);
+        splitter.connect(merger, 1, 0);
+        splitter.connect(merger, 1, 1);
+        
+        applyMonoSetting();
+    } catch (e) {
+        console.warn('Web Audio API not supported or failed to init', e);
+    }
+}
+
+function applyMonoSetting() {
+    if (!audioCtx || !sourceNode) return;
+    if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+    }
+    
+    sourceNode.disconnect();
+    try { merger.disconnect(); } catch(e){}
+    
+    if (userProfile.monoAudio) {
+        sourceNode.connect(splitter);
+        merger.connect(audioCtx.destination);
+    } else {
+        sourceNode.connect(audioCtx.destination);
+    }
+}
+
+// Re-hook audioPlayer play to init routing lazily
+audioPlayer.addEventListener('play', () => {
+    initAudioRouting();
+    if(audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+});
+
+// Load settings on boot
+loadUserProfileUI();
 
 // Initial View Load
 switchView('home');
