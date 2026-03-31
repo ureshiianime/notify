@@ -3132,9 +3132,6 @@ function initAudioRouting() {
         const AudioContext = window.AudioContext || window.webkitAudioContext;
         audioCtx = new AudioContext();
         
-        // Configurar CORS
-        audioPlayer.crossOrigin = "anonymous";
-        
         sourceNode = audioCtx.createMediaElementSource(audioPlayer);
         
         splitter = audioCtx.createChannelSplitter(2);
