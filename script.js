@@ -206,6 +206,23 @@ function decodeHTML(html) {
     return txt.value;
 }
 
+function formatArtistLinks(namesStr, idsStr, pointerEventsAuto = false) {
+    if (!namesStr) return "Artista Desconocido";
+    const names = namesStr.split(',').map(n => n.trim());
+    const ids = (idsStr || '').split(',').map(i => i.trim());
+
+    if (!idsStr) return decodeHTML(namesStr);
+    const extraStyle = pointerEventsAuto ? " pointer-events: auto;" : "";
+
+    return names.map((name, index) => {
+        const id = ids[index] || ids[0];
+        if (id && id !== '') {
+            return `<span class="artist-link" data-artist-id="${id}" style="cursor: pointer;${extraStyle}">${decodeHTML(name)}</span>`;
+        }
+        return decodeHTML(name);
+    }).join(', ');
+}
+
 function generateId() {
     return Date.now().toString(36) + Math.random().toString(36).substring(2);
 }
@@ -495,14 +512,11 @@ function renderPlaylistSongs(tracksToRender) {
         const artworkObj = track.image.find(img => img.quality && img.quality.includes('150')) || track.image[0];
         const smallArtworkUrl = artworkObj ? (artworkObj.url || artworkObj.link) : 'https://via.placeholder.com/150';
 
-        const artistName = decodeHTML(track.primaryArtists || track.singers || "Artista Desconocido");
+        const artistNameStr = track.primaryArtists || track.singers || "Artista Desconocido";
         const trackName = decodeHTML(track.name || track.title);
 
-        const artistId = (track.primaryArtistsId || '').split(',')[0].trim() || (track.artistId || '').split(',')[0].trim();
-        let artistHtml = `<p>${artistName}</p>`;
-        if (artistId) {
-            artistHtml = `<p><span class="artist-link" data-artist-id="${artistId}" style="cursor: pointer;">${artistName}</span></p>`;
-        }
+        const artistIdStr = track.primaryArtistsId || track.artistId || "";
+        const artistHtml = `<p>${formatArtistLinks(artistNameStr, artistIdStr)}</p>`;
 
         const item = document.createElement('div');
         item.className = 'song-item';
@@ -971,12 +985,16 @@ function getTrackScore(trackName, artistName, expectedArtist, expectedTitle, pla
     return score;
 }
 
-async function executeTxtImport(pName, sourceData, targetPlaylistId = null) {
-    let text = '';
-    if (typeof sourceData === 'string') text = sourceData;
-    else text = await sourceData.text();
-
-    const lines = text.split('\n').map(l => l.trim()).filter(l => l !== '');
+async function executeTxtImport(pName, sourceData, targetPlaylistId = null, resumeProcessed = 0, resumeFailedList = []) {
+    let lines = [];
+    if (Array.isArray(sourceData)) {
+        lines = sourceData;
+    } else {
+        let text = '';
+        if (typeof sourceData === 'string') text = sourceData;
+        else text = await sourceData.text();
+        lines = text.split('\n').map(l => l.trim()).filter(l => l !== '');
+    }
 
     let targetPlaylist = playlists.find(p => p.id === targetPlaylistId);
     if (!targetPlaylist) {
@@ -997,14 +1015,16 @@ async function executeTxtImport(pName, sourceData, targetPlaylistId = null) {
     const bText = document.getElementById('importProgressText');
     const bBar = document.getElementById('importProgressBar');
     banner.style.display = 'block';
-    bText.textContent = `Procesando 0 de ${lines.length} canciones`;
-    bBar.style.width = '0%';
+    
+    let failedList = resumeFailedList || [];
+    let processed = resumeProcessed || 0;
 
-    let failedList = [];
-    let processed = 0;
+    bText.textContent = `Procesando ${processed} de ${lines.length} canciones`;
+    bBar.style.width = `${(processed / lines.length) * 100}%`;
 
     // Asynchronous Line Loop Extraction Engine
-    for (const line of lines) {
+    for (let i = processed; i < lines.length; i++) {
+        const line = lines[i];
         try {
             const rawQuery = line;
             let expectedArtist = '';
@@ -1133,7 +1153,7 @@ async function executeTxtImport(pName, sourceData, targetPlaylistId = null) {
                     }).catch(() => { });
 
             } else {
-                failedList.push({ request: line, reason: "No se encontró audio original que superase el filtro estricto." });
+                failedList.push({ request: line, reason: "No se encontró audio original." });
             }
         } catch (globalError) {
             failedList.push({ request: line, reason: "Fallo crítico en API de escáner." });
@@ -1143,11 +1163,21 @@ async function executeTxtImport(pName, sourceData, targetPlaylistId = null) {
         bText.textContent = `Procesando ${processed} de ${lines.length} canciones`;
         bBar.style.width = `${(processed / lines.length) * 100}%`;
 
+        const importState = {
+            playlistName: targetPlaylist.name,
+            lines: lines,
+            processedCount: processed,
+            failedList: failedList,
+            targetPlaylistId: targetPlaylist.id
+        };
+        localStorage.setItem('notify_import_state', JSON.stringify(importState));
+
         // Permanent Throttle: Honor Apple's global API quotas by delaying precisely 1200ms between lines
         await new Promise(resolve => setTimeout(resolve, 1200));
     }
 
     // Finished Cleanup
+    localStorage.removeItem('notify_import_state');
     banner.style.display = 'none';
     if (createPlaylistDropdown) createPlaylistDropdown.style.display = 'none';
     showToast(`¡Playlist compilada exitosamente!`, 'fa-check');
@@ -1279,10 +1309,10 @@ function getBestAudioUrl(downloadUrlArray) {
 
     let targetQuality;
     const netType = getNetworkType();
-    
+
     // Obtenemos la configuración de calidad actual
     const activeSetting = netType === 'cellular' ? (userProfile.dataQuality || 'normal') : (userProfile.wifiQuality || 'premium');
-    
+
     switch (activeSetting) {
         case 'low': targetQuality = '96'; break;
         case 'normal': targetQuality = '160'; break;
@@ -1297,14 +1327,14 @@ function getBestAudioUrl(downloadUrlArray) {
     } else {
         const exact = downloadUrlArray.find(url => url.quality && url.quality.includes(targetQuality));
         if (exact && (exact.url || exact.link)) return exact.url || exact.link;
-        
+
         // Fallbacks
         const fb160 = downloadUrlArray.find(u => u.quality && u.quality.includes('160'));
         if (targetQuality === '320' && fb160 && (fb160.url || fb160.link)) return fb160.url || fb160.link;
-        
+
         const fb320 = downloadUrlArray.find(u => u.quality && u.quality.includes('320'));
         if (targetQuality === '160' && fb320 && (fb320.url || fb320.link)) return fb320.url || fb320.link;
-        
+
         const fb96 = downloadUrlArray.find(u => u.quality && u.quality.includes('96'));
         if (fb96 && (fb96.url || fb96.link)) return fb96.url || fb96.link;
     }
@@ -1378,15 +1408,12 @@ async function searchSongs(query, page = 1) {
             } catch (e) { }
         }
 
-        if (jioTracks.length === 0) {
-            if (page === 1) throw new Error("No se encontraron resultados en el servidor principal.");
-            else {
-                hasMoreResults = false;
-                isFetching = false;
-                const oldLoader = document.getElementById('bottomLoader');
-                if (oldLoader) oldLoader.remove();
-                return;
-            }
+        if (jioTracks.length === 0 && page > 1) {
+            hasMoreResults = false;
+            isFetching = false;
+            const oldLoader = document.getElementById('bottomLoader');
+            if (oldLoader) oldLoader.remove();
+            return;
         }
 
         // Parse explicit expected title & artist roughly from query if user used a dash
@@ -1424,10 +1451,38 @@ async function searchSongs(query, page = 1) {
         // Sort by playCount (popularity heuristics)
         newTracks.sort((a, b) => b.playCount - a.playCount);
 
-        // 4. Background Apple Music Cover Art Enrichment
-        // We do this instantly without awaiting so the user gets results immediately, 
-        // and covers magically snap into high-res when iTunes responds.
-        if (newTracks.length > 0) {
+        // 4. Fallback or Background Apple Music Cover Art Enrichment
+        if (newTracks.length === 0 && page === 1) {
+            // Apple Fallback for Previews!
+            try {
+                const appleRes = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(query)}&entity=song&limit=15`);
+                const appleData = await appleRes.json();
+                if (appleData.results && appleData.results.length > 0) {
+                    newTracks = appleData.results.map(at => {
+                        const hqImage = at.artworkUrl100 ? at.artworkUrl100.replace('100x100bb', '500x500bb') : 'https://via.placeholder.com/500';
+                        return {
+                            id: 'apple_' + at.trackId,
+                            name: decodeHTML(at.trackName),
+                            title: decodeHTML(at.trackName),
+                            primaryArtists: decodeHTML(at.artistName),
+                            primaryArtistsId: '',
+                            image: [{ quality: '500x500', url: hqImage }],
+                            downloadUrl: at.previewUrl ? [{ quality: '160kbps', url: at.previewUrl }] : [],
+                            previewUrl: at.previewUrl,
+                            playCount: 0,
+                            album: { name: decodeHTML(at.collectionName || ''), id: '' },
+                            isPreview: true
+                        };
+                    });
+                } else {
+                    throw new Error("No se encontraron resultados ni en el servidor principal ni en Apple Music.");
+                }
+            } catch (e) {
+                if (e.message) throw e;
+                else throw new Error("Fallo de conexión.");
+            }
+        } else if (newTracks.length > 0) {
+            // Background enrichment for existing Jio Tracks
             const appleQuery = `${newTracks[0].name} ${newTracks[0].primaryArtists.split(',')[0]}`;
             fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(appleQuery)}&entity=song&limit=15`)
                 .then(r => r.json())
@@ -1442,13 +1497,17 @@ async function searchSongs(query, page = 1) {
 
                         // Si encontramos una coincidencia en Apple, robamos su Artwork HD
                         if (masterHit && masterHit.artworkUrl100) {
-                            localTrack.image = [{ quality: '500x500', url: masterHit.artworkUrl100.replace('100x100', '500x500') }];
+                            localTrack.image = [{ quality: '500x500', url: masterHit.artworkUrl100.replace('100x100bb', '500x500bb') }];
                             // Re-render visual de la carátula si el DOM ya se pintó
                             const imgEl = document.querySelector(`.song-item img[data-track-id="${localTrack.id}"]`);
                             if (imgEl) imgEl.src = localTrack.image[0].url;
                         }
                     });
                 }).catch(e => console.warn("Apple Cover Art Fetch Failed", e));
+        }
+
+        if (newTracks.length === 0) {
+            throw new Error("No hay pistas renderizables");
         }
 
         if (page === 1) {
@@ -1485,7 +1544,7 @@ async function searchSongs(query, page = 1) {
             searchResults.innerHTML = `
                 <div class="empty-state">
                     <i class="fa-solid fa-triangle-exclamation"></i>
-                    <p>No se encontraron resultados compatibles (Filtro Estricto activado).</p>
+                    <p>No se encontraron resultados compatibles</p>
                 </div>
             `;
         } else {
@@ -1505,16 +1564,13 @@ function appendResults(newTracks, startIndex) {
         const smallArtworkObj = track.image.find(img => img.quality && img.quality.includes('150')) || track.image[0];
         const smallArtworkUrl = smallArtworkObj ? (smallArtworkObj.url || smallArtworkObj.link) : artworkUrl;
 
-        const artistName = decodeHTML(track.primaryArtists || track.singers || "Artista Desconocido");
+        const artistNameStr = track.primaryArtists || track.singers || "Artista Desconocido";
         const trackName = decodeHTML(track.name || track.title);
 
         const tagHtml = track.isPreview ? `<span class="preview-tag" style="background: rgba(255,0,0,0.2); color: #ff6b6b; padding: 2px 6px; border-radius: 4px; font-size: 10px; margin-left: 8px; vertical-align: middle; white-space: nowrap;">Solo Preview</span>` : '';
 
-        const artistId = (track.primaryArtistsId || '').split(',')[0].trim() || (track.artistId || '').split(',')[0].trim();
-        let artistHtml = `<p>${artistName}</p>`;
-        if (artistId) {
-            artistHtml = `<p><span class="artist-link" data-artist-id="${artistId}" style="cursor: pointer;">${artistName}</span></p>`;
-        }
+        const artistIdStr = track.primaryArtistsId || track.artistId || "";
+        const artistHtml = `<p>${formatArtistLinks(artistNameStr, artistIdStr)}</p>`;
 
         const item = document.createElement('div');
         item.className = 'song-item';
@@ -1920,14 +1976,11 @@ function renderArtistSongs() {
         const artworkObj = track.image.find(img => img.quality && img.quality.includes('150')) || track.image[0];
         const smallArtworkUrl = artworkObj ? (artworkObj.url || artworkObj.link) : 'https://via.placeholder.com/150';
 
-        const artistName = decodeHTML(track.primaryArtists || track.singers || "Artista Desconocido");
+        const artistNameStr = track.primaryArtists || track.singers || "Artista Desconocido";
         const trackName = decodeHTML(track.name || track.title);
 
-        const artistId = (track.primaryArtistsId || '').split(',')[0].trim() || (track.artistId || '').split(',')[0].trim();
-        let artistHtml = `<p>${artistName}</p>`;
-        if (artistId) {
-            artistHtml = `<p><span class="artist-link" data-artist-id="${artistId}" style="cursor: pointer;">${artistName}</span></p>`;
-        }
+        const artistIdStr = track.primaryArtistsId || track.artistId || "";
+        const artistHtml = `<p>${formatArtistLinks(artistNameStr, artistIdStr)}</p>`;
 
         const item = document.createElement('div');
         item.className = 'song-item';
@@ -2142,14 +2195,11 @@ function renderAlbumSongs() {
     }
 
     currentAlbumQueue.forEach((track, index) => {
-        const artistName = decodeHTML(track.primaryArtists || track.singers || "Artista Desconocido");
+        const artistNameStr = track.primaryArtists || track.singers || "Artista Desconocido";
         const trackName = decodeHTML(track.name || track.title);
 
-        const artistId = (track.primaryArtistsId || '').split(',')[0].trim() || (track.artistId || '').split(',')[0].trim();
-        let artistHtml = `<p>${artistName}</p>`;
-        if (artistId) {
-            artistHtml = `<p><span class="artist-link" data-artist-id="${artistId}" style="cursor: pointer;">${artistName}</span></p>`;
-        }
+        const artistIdStr = track.primaryArtistsId || track.artistId || "";
+        const artistHtml = `<p>${formatArtistLinks(artistNameStr, artistIdStr)}</p>`;
 
         const previewBadge = track.isPreview ? ` <span class="preview-tag" style="background: rgba(255,0,0,0.2); color: #ff6b6b; padding: 2px 6px; border-radius: 4px; font-size: 10px; margin-left: 8px; vertical-align: middle; white-space: nowrap;">Loading HQ...</span>` : '';
 
@@ -2269,6 +2319,9 @@ async function playTrack(index, queueArray = null, autoPlay = true, resumeTime =
     if (queueArray) currentQueue = queueArray;
     if (index < 0 || index >= currentQueue.length) return;
 
+    let slideDirection = 'next';
+    if (currentIndex !== -1 && index < currentIndex) slideDirection = 'prev';
+
     currentIndex = index;
     const track = currentQueue[currentIndex];
 
@@ -2282,19 +2335,32 @@ async function playTrack(index, queueArray = null, autoPlay = true, resumeTime =
     const smallArtworkObj = track.image.find(img => img.quality && img.quality.includes('150')) || track.image[0];
     const smallArtworkUrl = smallArtworkObj ? (smallArtworkObj.url || smallArtworkObj.link) : highQualityArtwork;
 
-    const artistName = decodeHTML(track.primaryArtists || track.singers || "Artista Desconocido");
+    const artistNameStr = track.primaryArtists || track.singers || "Artista Desconocido";
     const trackName = decodeHTML(track.name || track.title);
-    const artistId = (track.primaryArtistsId || '').split(',')[0].trim() || (track.artistId || '').split(',')[0].trim();
+    const artistIdStr = track.primaryArtistsId || track.artistId || "";
 
     if (window.innerWidth < 768) miniPlayer.style.display = 'flex';
 
+    // Trigger text slide animation
+    const miniTextContainer = document.querySelector('.mini-text');
+    const fullTextContainer = document.querySelector('.player-info');
+    if (miniTextContainer && fullTextContainer) {
+        miniTextContainer.classList.remove('text-slide-next-in', 'text-slide-prev-in');
+        fullTextContainer.classList.remove('text-slide-next-in', 'text-slide-prev-in');
+        void miniTextContainer.offsetWidth; // trigger reflow
+        void fullTextContainer.offsetWidth;
+        const animClass = slideDirection === 'next' ? 'text-slide-next-in' : 'text-slide-prev-in';
+        miniTextContainer.classList.add(animClass);
+        fullTextContainer.classList.add(animClass);
+    }
+
     miniCover.src = smallArtworkUrl;
     miniTitle.textContent = trackName;
-    miniArtist.innerHTML = artistId ? `<span class="artist-link" data-artist-id="${artistId}" style="cursor: pointer; pointer-events: auto;">${artistName}</span>` : artistName;
+    miniArtist.innerHTML = formatArtistLinks(artistNameStr, artistIdStr, true);
 
     fullCover.src = highQualityArtwork;
     fullTitle.textContent = trackName;
-    fullArtist.innerHTML = artistId ? `<span class="artist-link" data-artist-id="${artistId}" style="cursor: pointer; pointer-events: auto;">${artistName}</span>` : artistName;
+    fullArtist.innerHTML = formatArtistLinks(artistNameStr, artistIdStr, true);
 
     // Resolve Audio URL
     let audioUrl = getBestAudioUrl(track.downloadUrl);
@@ -2491,6 +2557,44 @@ openPlayerBtn.addEventListener('click', () => {
 closePlayerBtn.addEventListener('click', () => {
     fullPlayer.classList.remove('active');
 });
+
+// Swipe/Scroll on Mini Player to change songs
+let miniPlayerTouchStartX = 0;
+
+miniPlayer.addEventListener('touchstart', (e) => {
+    miniPlayerTouchStartX = e.touches[0].clientX;
+}, { passive: true });
+
+miniPlayer.addEventListener('touchend', (e) => {
+    const touchEndX = e.changedTouches[0].clientX;
+    const swipeDistance = touchEndX - miniPlayerTouchStartX;
+
+    // Swipe right (scroll hacia la derecha) -> Next song
+    if (swipeDistance > 50) {
+        playNext();
+    } 
+    // Swipe left (scroll hacia la izquierda) -> Previous song
+    else if (swipeDistance < -50) {
+        playPrev();
+    }
+});
+
+let isScrollingMiniPlayer = false;
+miniPlayer.addEventListener('wheel', (e) => {
+    if (isScrollingMiniPlayer) return;
+    if (Math.abs(e.deltaX) > 20) {
+        isScrollingMiniPlayer = true;
+        // Scroll right -> Next song
+        if (e.deltaX > 0) {
+            playNext();
+        } 
+        // Scroll left -> Previous song
+        else {
+            playPrev();
+        }
+        setTimeout(() => { isScrollingMiniPlayer = false; }, 500); // Debounce
+    }
+}, { passive: true });
 
 // Swipe Down to Close Player
 let playerTouchStartY = 0;
@@ -2949,14 +3053,11 @@ function renderAllArtistSongsChunk(tracksToRender) {
     tracksToRender.forEach((track) => {
         const artworkObj = track.image.find(img => img.quality && img.quality.includes('150')) || track.image[0];
         const smallArtworkUrl = artworkObj ? (artworkObj.url || artworkObj.link) : 'https://via.placeholder.com/150';
-        const artistName = decodeHTML(track.primaryArtists);
+        const artistNameStr = track.primaryArtists || "Artista Desconocido";
         const trackName = decodeHTML(track.title);
-        const artistId = (track.primaryArtistsId || '').split(',')[0].trim();
+        const artistIdStr = track.primaryArtistsId || "";
 
-        let artistHtml = `<p>${artistName}</p>`;
-        if (artistId) {
-            artistHtml = `<p><span class="artist-link" data-artist-id="${artistId}" style="cursor: pointer;">${artistName}</span></p>`;
-        }
+        const artistHtml = `<p>${formatArtistLinks(artistNameStr, artistIdStr)}</p>`;
 
         const item = document.createElement('div');
         item.className = 'song-item';
@@ -3043,11 +3144,11 @@ function loadUserProfileUI() {
     if (settingsProfileImg) settingsProfileImg.src = userProfile.image;
     if (settingsProfileNameDisplay) settingsProfileNameDisplay.textContent = userProfile.name;
     if (settingsProfileNameInput) settingsProfileNameInput.value = userProfile.name;
-    
+
     if (dataQualitySelect) dataQualitySelect.value = userProfile.dataQuality;
     if (wifiQualitySelect) wifiQualitySelect.value = userProfile.wifiQuality;
     if (monoAudioToggle) monoAudioToggle.checked = userProfile.monoAudio;
-    
+
     applyMonoSetting();
 }
 
@@ -3075,7 +3176,7 @@ if (editProfileNameBtn && profileNameDisplayContainer && editProfileNameContaine
         editProfileNameContainer.style.display = 'flex';
         settingsProfileNameInput.focus();
     });
-    
+
     const saveName = () => {
         const newName = settingsProfileNameInput.value.trim();
         if (newName) {
@@ -3087,7 +3188,7 @@ if (editProfileNameBtn && profileNameDisplayContainer && editProfileNameContaine
         editProfileNameContainer.style.display = 'none';
         profileNameDisplayContainer.style.display = 'flex';
     };
-    
+
     saveProfileNameBtn.addEventListener('click', saveName);
     settingsProfileNameInput.addEventListener('keypress', (e) => {
         if (e.key === 'Enter') saveName();
@@ -3136,19 +3237,19 @@ function unlockAudioContext() {
         try {
             const AudioContext = window.AudioContext || window.webkitAudioContext;
             audioCtx = new AudioContext();
-            
+
             // Re-apply CORS otherwise Safari might still restrict manipulation 
             // if we don't have it, but wait, setting it dynamically might crash playback.
             // Let's just create the nodes.
             sourceNode = audioCtx.createMediaElementSource(audioPlayer);
             splitter = audioCtx.createChannelSplitter(2);
             merger = audioCtx.createChannelMerger(2);
-            
-            splitter.connect(merger, 0, 0); 
+
+            splitter.connect(merger, 0, 0);
             splitter.connect(merger, 0, 1);
             splitter.connect(merger, 1, 0);
             splitter.connect(merger, 1, 1);
-            
+
             applyMonoSetting();
         } catch (e) {
             console.warn('Web Audio API no soportada', e);
@@ -3171,11 +3272,11 @@ document.addEventListener('touchstart', unlockAudioContext, { once: false });
 
 function applyMonoSetting() {
     if (!audioCtx || !sourceNode) return;
-    
+
     sourceNode.disconnect();
-    try { merger.disconnect(); } catch(e){}
-    try { audioCtx.destination.disconnect(); } catch(e){}
-    
+    try { merger.disconnect(); } catch (e) { }
+    try { audioCtx.destination.disconnect(); } catch (e) { }
+
     if (userProfile.monoAudio) {
         sourceNode.connect(splitter);
         merger.connect(audioCtx.destination);
@@ -3191,7 +3292,7 @@ loadUserProfileUI();
 switchView('home');
 loadPlaybackState();
 
-// --- Splash Screen ---
+// --- Splash Screen & Resume Checks ---
 window.addEventListener('load', () => {
     const splash = document.getElementById('appSplashScreen');
     if (splash) {
@@ -3199,7 +3300,77 @@ window.addEventListener('load', () => {
         setTimeout(() => {
             splash.style.opacity = '0';
             splash.style.visibility = 'hidden';
-            setTimeout(() => splash.remove(), 500);
+            setTimeout(() => {
+                splash.remove();
+                checkPausedImports();
+            }, 500);
         }, 800);
+    } else {
+        checkPausedImports();
     }
 });
+
+function checkPausedImports() {
+    const rawState = localStorage.getItem('notify_import_state');
+    if (!rawState) return;
+
+    try {
+        const state = JSON.parse(rawState);
+        if (!state.lines || state.processedCount >= state.lines.length) {
+            localStorage.removeItem('notify_import_state');
+            return;
+        }
+
+        const remaining = state.lines.length - state.processedCount;
+
+        const overlay = document.createElement('div');
+        overlay.className = 'modal-overlay';
+        overlay.style.display = 'flex';
+        overlay.style.opacity = '0';
+        overlay.style.backdropFilter = 'blur(15px)'; // Ensure intense blur for blockade
+
+        const modal = document.createElement('div');
+        modal.className = 'modal-content';
+
+        modal.innerHTML = `
+            <div class="modal-header">
+                <h3 style="margin: 0;">Importación Pausada</h3>
+            </div>
+            <div class="modal-body" style="text-align: center;">
+                <i class="fa-solid fa-clock-rotate-left" style="font-size: 32px; color: var(--accent-color); margin-bottom: 15px;"></i>
+                <p style="color: var(--text-secondary); font-size: 14px; margin: 0; line-height: 1.5;">
+                    Se interrumpió la importación de <strong>${state.playlistName}</strong>.<br>
+                    Faltan <strong>${remaining}</strong> canciones. ¿Deseas continuar?
+                </p>
+            </div>
+            <div class="modal-footer" style="display: flex; gap: 10px; border-top: none; padding-top: 5px;">
+                <button id="cancelImportBtn" class="primary-btn" style="flex: 1; background: rgba(255,255,255,0.1); justify-content: center;">Cancelar</button>
+                <button id="resumeImportBtn" class="primary-btn" style="flex: 1; justify-content: center;">Sí, Continuar</button>
+            </div>
+        `;
+
+        overlay.appendChild(modal);
+        document.body.appendChild(overlay);
+
+        // Animate in
+        requestAnimationFrame(() => {
+            overlay.style.opacity = '1';
+            modal.style.transform = 'scale(1)';
+            modal.style.opacity = '1';
+        });
+
+        document.getElementById('resumeImportBtn').addEventListener('click', () => {
+            overlay.remove();
+            executeTxtImport(state.playlistName, state.lines, state.targetPlaylistId, state.processedCount, state.failedList);
+        });
+
+        document.getElementById('cancelImportBtn').addEventListener('click', () => {
+            localStorage.removeItem('notify_import_state');
+            overlay.style.opacity = '0';
+            setTimeout(() => overlay.remove(), 200);
+        });
+
+    } catch (e) {
+        localStorage.removeItem('notify_import_state');
+    }
+}

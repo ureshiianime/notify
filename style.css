@@ -1057,3 +1057,21 @@ img {
 .toggle-switch input:checked + .slider:before {
     transform: translateX(22px);
 }
+
+/* Text slide animations for song changes */
+.text-slide-next-in {
+    animation: slideInRight 0.3s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+}
+.text-slide-prev-in {
+    animation: slideInLeft 0.3s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+}
+
+@keyframes slideInRight {
+    0% { transform: translateX(30px); opacity: 0; }
+    100% { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes slideInLeft {
+    0% { transform: translateX(-30px); opacity: 0; }
+    100% { transform: translateX(0); opacity: 1; }
+}
