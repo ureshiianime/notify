@@ -3056,9 +3056,6 @@ function setupMediaSession(title, artist, album, smallArtwork, largeArtwork) {
             ]
         });
 
-        // Force iOS to sync the play/pause button state immediately after setting new metadata
-        navigator.mediaSession.playbackState = audioPlayer.paused ? 'paused' : 'playing';
-
         navigator.mediaSession.setActionHandler('play', () => {
             audioPlayer.play().then(() => {
                 navigator.mediaSession.playbackState = 'playing';
