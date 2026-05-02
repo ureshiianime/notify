@@ -2647,10 +2647,12 @@ function updatePlayState(state) {
         miniPlayPauseBtn.innerHTML = '<i class="fa-solid fa-pause"></i>';
         playPauseBtn.innerHTML = '<i class="fa-solid fa-pause" style="margin-left: -4px;"></i>';
         fullCover.classList.remove('paused');
+        if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing';
     } else {
         miniPlayPauseBtn.innerHTML = '<i class="fa-solid fa-play"></i>';
         playPauseBtn.innerHTML = '<i class="fa-solid fa-play"></i>';
         fullCover.classList.add('paused');
+        if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused';
     }
 
     const isPlayingOrLoading = (state === true || state === 'loading');
@@ -2963,7 +2965,6 @@ function stopKeepAlive() {
 audioPlayer.addEventListener('play', () => {
     stopKeepAlive(); // No need while playing
     updatePlayState(true);
-    if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing';
     updateMediaSessionPosition();
 });
 
@@ -2985,7 +2986,6 @@ audioPlayer.addEventListener('pause', () => {
     // Ignore async pause events that fire while we are actively buffering a new track
     if (!isChangingTrack && audioPlayer.paused) {
         updatePlayState(false);
-        if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused';
     }
     savePlaybackState();
     updateMediaSessionPosition();
@@ -3055,6 +3055,9 @@ function setupMediaSession(title, artist, album, smallArtwork, largeArtwork) {
                 { src: largeArtwork, sizes: '1024x1024' }
             ]
         });
+
+        // Force iOS to sync the play/pause button state immediately after setting new metadata
+        navigator.mediaSession.playbackState = audioPlayer.paused ? 'paused' : 'playing';
 
         navigator.mediaSession.setActionHandler('play', () => {
             audioPlayer.play().then(() => {
