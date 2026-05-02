@@ -83,11 +83,12 @@
 
         <!-- Search View -->
         <div id="searchView" class="view-container" style="display: none;">
-            <div class="search-bar-container">
+            <div class="search-bar-container" style="position: relative;">
                 <div class="search-bar">
                     <i class="fa-solid fa-search"></i>
                     <input type="text" id="searchInput" placeholder="Buscar canciones, artistas..." autocomplete="off">
                 </div>
+                <div id="searchSuggestionsContainer" class="search-suggestions" style="display: none;"></div>
             </div>
             <main class="main-content" id="searchResults">
                 <div class="empty-state">

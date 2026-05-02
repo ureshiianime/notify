@@ -1,4 +1,5 @@
 const searchInput = document.getElementById('searchInput');
+const searchSuggestionsContainer = document.getElementById('searchSuggestionsContainer');
 const searchResults = document.getElementById('searchResults');
 const audioPlayer = document.getElementById('audioPlayer');
 const mainTitle = document.getElementById('mainTitle');
@@ -165,6 +166,7 @@ let currentQueue = [];
 let currentIndex = -1;
 let debounceTimer;
 let currentPlayRequestId = 0; // Tracks rapid skipping calls to avoid race conditions
+let isChangingTrack = false; // Prevent async pause events from overwriting loading UI
 
 // Pagination State
 let currentSearchQuery = '';
@@ -212,6 +214,7 @@ function formatArtistLinks(namesStr, idsStr, pointerEventsAuto = false) {
     const ids = (idsStr || '').split(',').map(i => i.trim());
 
     if (!idsStr) return decodeHTML(namesStr);
+
     const extraStyle = pointerEventsAuto ? " pointer-events: auto;" : "";
 
     return names.map((name, index) => {
@@ -1608,12 +1611,133 @@ function appendResults(newTracks, startIndex) {
     });
 }
 
+let suggestionsTimer;
+
 searchInput.addEventListener('input', (e) => {
-    clearTimeout(debounceTimer);
-    debounceTimer = setTimeout(() => {
-        searchSongs(e.target.value, 1);
-    }, 600);
+    const query = e.target.value.trim();
+    
+    if (!query) {
+        searchSuggestionsContainer.style.display = 'none';
+        return;
+    }
+
+    clearTimeout(suggestionsTimer);
+    suggestionsTimer = setTimeout(() => {
+        fetchSearchSuggestions(query);
+    }, 300);
 });
+
+searchInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+        const query = e.target.value.trim();
+        if (query) {
+            searchSuggestionsContainer.style.display = 'none';
+            searchSongs(query, 1);
+            searchInput.blur();
+        }
+    }
+});
+
+searchInput.addEventListener('focus', () => {
+    if (searchInput.value.trim() && searchSuggestionsContainer.innerHTML.trim() !== '') {
+        searchSuggestionsContainer.style.display = 'block';
+    }
+});
+
+document.addEventListener('click', (e) => {
+    if (!searchInput.contains(e.target) && !searchSuggestionsContainer.contains(e.target)) {
+        searchSuggestionsContainer.style.display = 'none';
+    }
+});
+
+async function fetchSearchSuggestions(query) {
+    try {
+        const [artistSearchData, songRes] = await Promise.all([
+            fetchArtistSearch(query).catch(() => null),
+            fetch(`https://jiosaavn-api-privatecvc2.vercel.app/search/songs?query=${encodeURIComponent(query)}&limit=15`).catch(() => null)
+        ]);
+        
+        let html = '';
+        let artists = [];
+        if (artistSearchData && artistSearchData.artists) {
+            artists = artistSearchData.artists.slice(0, 2);
+        }
+
+        let songs = [];
+        if (songRes && songRes.ok) {
+            const songData = await songRes.json();
+            let hits = songData.data && songData.data.results ? songData.data.results : (songData.results || []);
+            songs = hits.filter(s => passesStrictFilters(s, '', '')).slice(0, 4);
+        }
+
+        if (artists.length > 0) {
+            artists.forEach(artist => {
+                let img = 'https://via.placeholder.com/150';
+                if (Array.isArray(artist.image) && artist.image.length > 0) {
+                    img = artist.image[0].url || artist.image[0].link || img;
+                }
+
+                html += `
+                <div class="suggestion-item" onclick="handleSuggestionClick('artist', '${artist.id}', '${(artist.name || '').replace(/'/g, "\\'")}')">
+                    <i class="fa-solid fa-search suggestion-icon"></i>
+                    <img src="${img}" class="suggestion-img artist" alt="Artist">
+                    <div class="suggestion-info">
+                        <div class="suggestion-title">${artist.name}</div>
+                        <div class="suggestion-subtitle">Artista</div>
+                    </div>
+                </div>
+                `;
+            });
+        }
+
+        if (songs.length > 0) {
+            songs.forEach(song => {
+                let img = 'https://via.placeholder.com/150';
+                if (Array.isArray(song.image)) {
+                    const imgObj = song.image.find(i => i.quality && i.quality.includes('150')) || song.image[0];
+                    if (imgObj) img = imgObj.link || imgObj.url;
+                } else if (typeof song.image === 'string') {
+                    img = song.image;
+                }
+
+                const sTitle = song.title || song.name || '';
+                const sArtist = song.primaryArtists || song.singers || 'Artista desconocido';
+
+                html += `
+                <div class="suggestion-item" onclick="handleSuggestionClick('song', '${sTitle.replace(/'/g, "\\'")}', '${sArtist.replace(/'/g, "\\'")}')">
+                    <i class="fa-solid fa-search suggestion-icon"></i>
+                    <img src="${img}" class="suggestion-img" alt="Cover">
+                    <div class="suggestion-info">
+                        <div class="suggestion-title">${sTitle}</div>
+                        <div class="suggestion-subtitle">Canción • ${sArtist}</div>
+                    </div>
+                </div>
+                `;
+            });
+        }
+
+        if (html) {
+            searchSuggestionsContainer.innerHTML = html;
+            searchSuggestionsContainer.style.display = 'block';
+        } else {
+            searchSuggestionsContainer.style.display = 'none';
+        }
+    } catch (e) {
+        console.error("Error fetching suggestions", e);
+    }
+}
+
+window.handleSuggestionClick = function(type, idOrTitle, artistName) {
+    searchSuggestionsContainer.style.display = 'none';
+    if (type === 'artist') {
+        searchInput.value = '';
+        openArtistDetail(idOrTitle, artistName);
+    } else if (type === 'song') {
+        const q = idOrTitle + ' ' + artistName;
+        searchInput.value = q;
+        searchSongs(q, 1);
+    }
+};
 
 searchResults.addEventListener('scroll', () => {
     if (isFetching || !hasMoreResults || currentSearchQuery === '') return;
@@ -1834,6 +1958,18 @@ async function openArtistDetail(artistId, artistNameFallback = '') {
             }
         }
 
+        // Deduplicate validTracks to prevent the same song from appearing multiple times
+        const uniqueValidTracks = [];
+        const seenValidNames = new Set();
+        validTracks.forEach(jt => {
+            const trackTitle = (jt.name || jt.title || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\([^)]*\)/g, '').trim();
+            if (!seenValidNames.has(trackTitle) && trackTitle.length > 0) {
+                seenValidNames.add(trackTitle);
+                uniqueValidTracks.push(jt);
+            }
+        });
+        validTracks = uniqueValidTracks;
+
         // 3. Format Tracks & Extract Highest Quality Audio (320kbps prioritized)
         currentArtistQueue = validTracks.slice(0, 30).map(jt => {
             const rawAudioUrl = getBestAudioUrl(jt.downloadUrl) || '';
@@ -2002,7 +2138,7 @@ function renderArtistSongs() {
                 return;
             }
             if (!e.target.closest('.song-actions')) {
-                activeContextId = 'artist';
+                activeContextId = 'artist_' + currentArtistIdForAlbums;
                 playTrack(index, currentArtistQueue.slice());
             }
         });
@@ -2047,14 +2183,14 @@ stickyArtistPlayBtn.addEventListener('click', () => {
 playAllArtistBtn.addEventListener('click', () => {
     if (currentArtistQueue.length === 0) return;
 
-    if (activeContextId === 'artist') {
+    if (activeContextId === 'artist_' + currentArtistIdForAlbums) {
         togglePlay();
     } else {
         let startIndex = 0;
         if (isShuffleOn) {
             startIndex = Math.floor(Math.random() * currentArtistQueue.length);
         }
-        activeContextId = 'artist';
+        activeContextId = 'artist_' + currentArtistIdForAlbums;
         playTrack(startIndex, currentArtistQueue.slice());
     }
 });
@@ -2312,12 +2448,18 @@ saveAlbumBtn.addEventListener('click', () => {
 async function playTrack(index, queueArray = null, autoPlay = true, resumeTime = 0) {
     currentPlayRequestId++;
     const sessionId = currentPlayRequestId;
+    
+    isChangingTrack = true;
+    audioPlayer._pendingResumeTime = 0; // Prevent leak from previous tracks
 
     // Warm up/Claim audio element immediately in sync context for iOS
     audioPlayer.load();
 
     if (queueArray) currentQueue = queueArray;
-    if (index < 0 || index >= currentQueue.length) return;
+    if (index < 0 || index >= currentQueue.length) {
+        isChangingTrack = false;
+        return;
+    }
 
     let slideDirection = 'next';
     if (currentIndex !== -1 && index < currentIndex) slideDirection = 'prev';
@@ -2326,8 +2468,7 @@ async function playTrack(index, queueArray = null, autoPlay = true, resumeTime =
     const track = currentQueue[currentIndex];
 
     // UI Feedback: Show loading spinner immediately
-    miniPlayPauseBtn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i>';
-    playPauseBtn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i>';
+    updatePlayState('loading');
 
     const artworkObj = track.image.find(img => img.quality && img.quality.includes('500')) || track.image[track.image.length - 1];
     const highQualityArtwork = artworkObj ? (artworkObj.url || artworkObj.link) : 'https://via.placeholder.com/500';
@@ -2399,7 +2540,10 @@ async function playTrack(index, queueArray = null, autoPlay = true, resumeTime =
     }
 
     // Abort if a NEW track was requested during the await
-    if (sessionId !== currentPlayRequestId) return;
+    if (sessionId !== currentPlayRequestId) {
+        // isChangingTrack is managed by the NEW track's request, so don't set it to false here.
+        return;
+    }
 
     if (!audioUrl) {
         if (track.previewUrl) {
@@ -2413,41 +2557,93 @@ async function playTrack(index, queueArray = null, autoPlay = true, resumeTime =
             });
         } else {
             showToast("Audio completo no disponible. Saltando...", "fa-triangle-exclamation");
+            isChangingTrack = false;
             setTimeout(playNext, 1500);
             return;
         }
     }
+
+    // Configurar metadatos del reproductor de iOS antes de iniciar el audio
+    const safeSmallArt = smallArtworkUrl ? smallArtworkUrl.replace('http://', 'https://') : 'https://via.placeholder.com/150';
+    const safeLargeArt = highQualityArtwork ? highQualityArtwork.replace('http://', 'https://') : 'https://via.placeholder.com/500';
+    setupMediaSession(trackName, artistNameStr, (track.album && track.album.name) || 'Sencillo', safeSmallArt, safeLargeArt);
 
     audioPlayer.src = audioUrl;
 
     if (autoPlay) {
         audioPlayer.play().then(() => {
             if (sessionId !== currentPlayRequestId) { audioPlayer.pause(); return; }
-            if (resumeTime > 0) audioPlayer.currentTime = resumeTime;
-            setupMediaSession(trackName, artistName, (track.album && track.album.name) || 'Sencillo', smallArtworkUrl, highQualityArtwork);
-        }).catch(e => {
+            isChangingTrack = false;
+            updatePlayState(true);
+            try {
+                if (resumeTime > 0) audioPlayer.currentTime = resumeTime;
+            } catch (err) {
+                console.error("Non-critical error after play:", err);
+            }
+        }, e => {
+            if (sessionId === currentPlayRequestId) {
+                isChangingTrack = false;
+                updatePlayState(false);
+            }
             console.error("Playback error", e);
-            updatePlayState(false);
         });
     } else {
+        isChangingTrack = false;
         updatePlayState(false);
-        setupMediaSession(trackName, artistName, (track.album && track.album.name) || 'Sencillo', smallArtworkUrl, highQualityArtwork);
+        
         if (resumeTime > 0) {
-            currentTimeEl.textContent = formatTime(resumeTime);
             audioPlayer._pendingResumeTime = resumeTime;
-            audioPlayer.addEventListener('canplay', () => {
+            
+            // Calculamos duración aproximada para mostrar la barra sin necesidad de que el audio haya cargado
+            let trackDuration = parseInt(track.duration) || Math.floor(track.trackTimeMillis / 1000) || 180;
+            
+            // Actualización visual inmediata
+            currentTimeEl.textContent = formatTime(resumeTime);
+            durationTimeEl.textContent = formatTime(trackDuration);
+            const percent = (resumeTime / trackDuration) * 100;
+            progressBar.style.width = `${percent}%`;
+            miniProgress.style.width = `${percent}%`;
+            
+            // Simular el HUD de pantalla de bloqueo
+            if ('mediaSession' in navigator && navigator.mediaSession.setPositionState) {
+                try {
+                    navigator.mediaSession.setPositionState({
+                        duration: trackDuration,
+                        playbackRate: 1,
+                        position: resumeTime
+                    });
+                } catch(e) {}
+            }
+
+            // Aplicar el salto de tiempo robustamente cuando el audio empiece a reproducirse de verdad
+            const applyResumeTime = () => {
                 if (audioPlayer._pendingResumeTime > 0) {
-                    audioPlayer.currentTime = audioPlayer._pendingResumeTime;
+                    try { audioPlayer.currentTime = audioPlayer._pendingResumeTime; } catch(e) {}
+                    updateMediaSessionPosition();
+                }
+            };
+            
+            const finalizeResumeTime = () => {
+                if (audioPlayer._pendingResumeTime > 0) {
+                    try { audioPlayer.currentTime = audioPlayer._pendingResumeTime; } catch(e) {}
                     audioPlayer._pendingResumeTime = 0;
                     updateMediaSessionPosition();
                 }
-            }, { once: true });
+            };
+
+            audioPlayer.addEventListener('loadedmetadata', applyResumeTime, { once: true });
+            audioPlayer.addEventListener('canplay', applyResumeTime, { once: true });
+            audioPlayer.addEventListener('playing', finalizeResumeTime, { once: true });
         }
     }
 }
 
-function updatePlayState(isPlaying) {
-    if (isPlaying) {
+function updatePlayState(state) {
+    if (state === 'loading') {
+        miniPlayPauseBtn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i>';
+        playPauseBtn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i>';
+        fullCover.classList.remove('paused');
+    } else if (state === true) {
         miniPlayPauseBtn.innerHTML = '<i class="fa-solid fa-pause"></i>';
         playPauseBtn.innerHTML = '<i class="fa-solid fa-pause" style="margin-left: -4px;"></i>';
         fullCover.classList.remove('paused');
@@ -2457,11 +2653,14 @@ function updatePlayState(isPlaying) {
         fullCover.classList.add('paused');
     }
 
+    const isPlayingOrLoading = (state === true || state === 'loading');
+    const loadingIcon = '<i class="fa-solid fa-circle-notch fa-spin"></i>';
+
     // Sincronizar botones de la playlist actual si estamos en una (tanto el grande como el fijo)
     if (playAllPlaylistBtn && stickyPlayBtn && currentViewedPlaylist) {
-        if (isPlaying && activeContextId === currentViewedPlaylist.id) {
-            playAllPlaylistBtn.innerHTML = '<i class="fa-solid fa-pause"></i>';
-            stickyPlayBtn.innerHTML = '<i class="fa-solid fa-pause"></i>';
+        if (isPlayingOrLoading && activeContextId === currentViewedPlaylist.id) {
+            playAllPlaylistBtn.innerHTML = state === 'loading' ? loadingIcon : '<i class="fa-solid fa-pause"></i>';
+            stickyPlayBtn.innerHTML = state === 'loading' ? loadingIcon : '<i class="fa-solid fa-pause"></i>';
         } else {
             playAllPlaylistBtn.innerHTML = '<i class="fa-solid fa-play" style="margin-left: 4px;"></i>';
             stickyPlayBtn.innerHTML = '<i class="fa-solid fa-play" style="margin-left: 2px;"></i>';
@@ -2470,9 +2669,9 @@ function updatePlayState(isPlaying) {
 
     // Sincronizar botones de artista si estamos en uno
     if (playAllArtistBtn && stickyArtistPlayBtn) {
-        if (isPlaying && activeContextId === 'artist') {
-            playAllArtistBtn.innerHTML = '<i class="fa-solid fa-pause"></i>';
-            stickyArtistPlayBtn.innerHTML = '<i class="fa-solid fa-pause"></i>';
+        if (isPlayingOrLoading && activeContextId === 'artist_' + currentArtistIdForAlbums) {
+            playAllArtistBtn.innerHTML = state === 'loading' ? loadingIcon : '<i class="fa-solid fa-pause"></i>';
+            stickyArtistPlayBtn.innerHTML = state === 'loading' ? loadingIcon : '<i class="fa-solid fa-pause"></i>';
         } else {
             playAllArtistBtn.innerHTML = '<i class="fa-solid fa-play" style="margin-left: 4px;"></i>';
             stickyArtistPlayBtn.innerHTML = '<i class="fa-solid fa-play" style="margin-left: 2px;"></i>';
@@ -2482,9 +2681,9 @@ function updatePlayState(isPlaying) {
     // Sincronizar botones de album
     if (playAllAlbumBtn && stickyAlbumPlayBtn && currentViewedAlbumMeta) {
         const ctx = 'album_' + currentViewedAlbumMeta.id;
-        if (isPlaying && activeContextId === ctx) {
-            playAllAlbumBtn.innerHTML = '<i class="fa-solid fa-pause"></i>';
-            stickyAlbumPlayBtn.innerHTML = '<i class="fa-solid fa-pause"></i>';
+        if (isPlayingOrLoading && activeContextId === ctx) {
+            playAllAlbumBtn.innerHTML = state === 'loading' ? loadingIcon : '<i class="fa-solid fa-pause"></i>';
+            stickyAlbumPlayBtn.innerHTML = state === 'loading' ? loadingIcon : '<i class="fa-solid fa-pause"></i>';
         } else {
             playAllAlbumBtn.innerHTML = '<i class="fa-solid fa-play" style="margin-left: 4px;"></i>';
             stickyAlbumPlayBtn.innerHTML = '<i class="fa-solid fa-play" style="margin-left: 2px;"></i>';
@@ -2499,12 +2698,17 @@ function togglePlay() {
         stopKeepAlive(); // Stop silent loop before playing real audio
         // If there's a pending resume time (page just loaded), seek before playing
         const pending = audioPlayer._pendingResumeTime || 0;
+        
+        if (pending > 0) {
+            try { audioPlayer.currentTime = pending; } catch(e) {}
+        }
+        
         audioPlayer.play().then(() => {
             if (pending > 0) {
-                audioPlayer.currentTime = pending;
-                audioPlayer._pendingResumeTime = 0;
+                try { audioPlayer.currentTime = pending; } catch(e) {}
                 updateMediaSessionPosition();
             }
+            updatePlayState(true);
         }).catch(e => {
             console.error("Play failed", e);
         });
@@ -2535,6 +2739,7 @@ function playNext() {
 function playPrev() {
     if (audioPlayer.currentTime > 5) {
         audioPlayer.currentTime = 0;
+        audioPlayer._pendingResumeTime = 0;
     } else if (currentIndex > 0) {
         playTrack(currentIndex - 1);
     } else if (currentQueue.length > 0) {
@@ -2560,24 +2765,82 @@ closePlayerBtn.addEventListener('click', () => {
 
 // Swipe/Scroll on Mini Player to change songs
 let miniPlayerTouchStartX = 0;
+let isSwipingMiniPlayer = false;
 
 miniPlayer.addEventListener('touchstart', (e) => {
     miniPlayerTouchStartX = e.touches[0].clientX;
+    isSwipingMiniPlayer = true;
+    openPlayerBtn.style.transition = 'none';
+}, { passive: true });
+
+miniPlayer.addEventListener('touchmove', (e) => {
+    if (!isSwipingMiniPlayer) return;
+    const currentX = e.touches[0].clientX;
+    const deltaX = currentX - miniPlayerTouchStartX;
+    
+    // Difuminar y mover solo la informacion del bloque
+    const moveX = deltaX;
+    const opacity = Math.max(0, 1 - Math.abs(moveX) / (window.innerWidth * 0.4));
+    
+    openPlayerBtn.style.transform = `translateX(${moveX}px)`;
+    openPlayerBtn.style.opacity = opacity.toString();
 }, { passive: true });
 
 miniPlayer.addEventListener('touchend', (e) => {
+    if (!isSwipingMiniPlayer) return;
+    isSwipingMiniPlayer = false;
     const touchEndX = e.changedTouches[0].clientX;
     const swipeDistance = touchEndX - miniPlayerTouchStartX;
 
-    // Swipe right (scroll hacia la derecha) -> Next song
-    if (swipeDistance > 50) {
-        playNext();
-    } 
-    // Swipe left (scroll hacia la izquierda) -> Previous song
-    else if (swipeDistance < -50) {
-        playPrev();
+    openPlayerBtn.style.transition = 'transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94), opacity 0.3s ease';
+
+    if (swipeDistance < -50) {
+        // Swipe left -> Next song
+        openPlayerBtn.style.transform = `translateX(-100%)`;
+        openPlayerBtn.style.opacity = '0';
+        setTimeout(() => {
+            playNext();
+            resetMiniPlayerPosition('right'); // Entra desde la derecha
+        }, 300);
+    } else if (swipeDistance > 50) {
+        // Swipe right -> Previous song
+        openPlayerBtn.style.transform = `translateX(100%)`;
+        openPlayerBtn.style.opacity = '0';
+        setTimeout(() => {
+            playPrev();
+            resetMiniPlayerPosition('left'); // Entra desde la izquierda
+        }, 300);
+    } else {
+        // Not far enough, restore
+        resetMiniPlayerPosition('center');
     }
 });
+
+function resetMiniPlayerPosition(fromDirection) {
+    if (fromDirection === 'right' || fromDirection === 'left') {
+        // Colocarlo instantáneamente en el lado opuesto invisiblemente
+        openPlayerBtn.style.transition = 'none';
+        openPlayerBtn.style.transform = fromDirection === 'right' ? 'translateX(100%)' : 'translateX(-100%)';
+        openPlayerBtn.style.opacity = '0';
+        
+        // Forzar reflujo para que el navegador registre la posición sin transición
+        void openPlayerBtn.offsetWidth;
+        
+        // Animar hacia el centro
+        openPlayerBtn.style.transition = 'transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94), opacity 0.4s ease';
+    }
+    
+    openPlayerBtn.style.transform = 'matrix(1, 0, 0, 1, 0, 0)'; 
+    openPlayerBtn.style.opacity = '1';
+    
+    setTimeout(() => {
+        if (!isSwipingMiniPlayer) {
+            openPlayerBtn.style.transition = '';
+            openPlayerBtn.style.transform = '';
+        }
+    }, 400);
+}
+
 
 let isScrollingMiniPlayer = false;
 miniPlayer.addEventListener('wheel', (e) => {
@@ -2630,8 +2893,19 @@ function savePlaybackState() {
 // Wall-clock throttle: save at most every 5 real seconds while playing
 let _lastSaveWallTime = 0;
 audioPlayer.addEventListener('timeupdate', () => {
-    const current = audioPlayer.currentTime;
-    const duration = audioPlayer.duration;
+    let current = audioPlayer.currentTime;
+    let duration = audioPlayer.duration;
+
+    // Si hay un resumeTime pendiente evitamos que el navegador lo mande a 0 visualmente.
+    if (audioPlayer._pendingResumeTime > 0) {
+        current = audioPlayer._pendingResumeTime;
+        // Si no hay duración todavía, usamos una estimación o no actualizamos la barra
+        if (!duration || isNaN(duration)) {
+            const track = currentQueue[currentIndex];
+            duration = track ? (parseInt(track.duration) || Math.floor(track.trackTimeMillis / 1000) || 180) : 180;
+        }
+    }
+
     if (duration) {
         const percent = (current / duration) * 100;
         progressBar.style.width = `${percent}%`;
@@ -2707,9 +2981,12 @@ audioPlayer.addEventListener('pause', () => {
     // If native OS paused the player (e.g. pulling out headphones), we MUST start keepalive
     // to prevent instant PWA death within 10s on iOS.
     startKeepAlive();
-    updatePlayState(false);
-
-    if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused';
+    
+    // Ignore async pause events that fire while we are actively buffering a new track
+    if (!isChangingTrack && audioPlayer.paused) {
+        updatePlayState(false);
+        if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused';
+    }
     savePlaybackState();
     updateMediaSessionPosition();
 });
@@ -2753,6 +3030,7 @@ function updateMediaSessionPosition() {
 progressContainer.addEventListener('click', (e) => {
     const rect = progressContainer.getBoundingClientRect();
     const percent = (e.clientX - rect.left) / rect.width;
+    audioPlayer._pendingResumeTime = 0;
     audioPlayer.currentTime = percent * audioPlayer.duration;
     updateMediaSessionPosition();
 });
@@ -2768,12 +3046,13 @@ window.addEventListener('resize', () => {
 function setupMediaSession(title, artist, album, smallArtwork, largeArtwork) {
     if ('mediaSession' in navigator) {
         navigator.mediaSession.metadata = new MediaMetadata({
-            title: title,
-            artist: artist,
-            album: album,
+            title: title || 'Ñotify',
+            artist: artist || 'Artista Desconocido',
+            album: album || 'Sencillo',
             artwork: [
-                { src: smallArtwork, sizes: '150x150', type: 'image/jpeg' },
-                { src: largeArtwork, sizes: '500x500', type: 'image/jpeg' }
+                { src: smallArtwork, sizes: '150x150' },
+                { src: largeArtwork, sizes: '500x500' },
+                { src: largeArtwork, sizes: '1024x1024' }
             ]
         });
 
@@ -2800,6 +3079,7 @@ function setupMediaSession(title, artist, album, smallArtwork, largeArtwork) {
         try {
             navigator.mediaSession.setActionHandler('seekto', (details) => {
                 if (details.seekTime !== undefined && details.seekTime !== null) {
+                    audioPlayer._pendingResumeTime = 0;
                     audioPlayer.currentTime = details.seekTime;
                     updateMediaSessionPosition();
                 }
@@ -2951,7 +3231,22 @@ showAllArtistSongsBtn.addEventListener('click', () => {
     allArtistSongsListContainer.innerHTML = '';
     currentAllArtistSongsPage = 1;
     hasMoreAllArtistSongs = true;
+    
+    // Iniciar con las canciones del top ya cargadas y desduplicadas
+    const seenTopNames = new Set();
     currentAllArtistSongsData = [];
+    currentArtistQueue.forEach(t => {
+        const norm = t.name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\([^)]*\)/g, '').trim();
+        if (!seenTopNames.has(norm)) {
+            seenTopNames.add(norm);
+            currentAllArtistSongsData.push(t);
+        }
+    });
+
+    if (currentAllArtistSongsData.length > 0) {
+        renderAllArtistSongsChunk(currentAllArtistSongsData);
+    }
+    
     if (allArtistSongsFilterInput) allArtistSongsFilterInput.value = '';
     allArtistSongsLoader.style.display = 'block';
 
@@ -3006,18 +3301,31 @@ async function fetchNextAllArtistSongs() {
                 // Fetch high res artwork in background
                 enhanceWithAppleArtwork(newFormattedTracks);
 
-                currentAllArtistSongsData = currentAllArtistSongsData.concat(newFormattedTracks);
+                const uniqueNewTracks = [];
+                const seenNames = new Set(currentAllArtistSongsData.map(t => 
+                    t.name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\([^)]*\)/g, '').trim()
+                ));
+
+                newFormattedTracks.forEach(newTrack => {
+                    const newNormName = newTrack.name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\([^)]*\)/g, '').trim();
+                    if (!seenNames.has(newNormName)) {
+                        seenNames.add(newNormName);
+                        uniqueNewTracks.push(newTrack);
+                    }
+                });
+
+                currentAllArtistSongsData = currentAllArtistSongsData.concat(uniqueNewTracks);
 
                 const q = (allArtistSongsFilterInput.value || '').toLowerCase().trim();
                 if (q) {
-                    const validChunk = newFormattedTracks.filter(t => {
+                    const validChunk = uniqueNewTracks.filter(t => {
                         const title = (t.name || t.title || '').toLowerCase();
                         const artist = (t.primaryArtists || t.singers || '').toLowerCase();
                         return title.includes(q) || artist.includes(q);
                     });
                     renderAllArtistSongsChunk(validChunk);
                 } else {
-                    renderAllArtistSongsChunk(newFormattedTracks);
+                    renderAllArtistSongsChunk(uniqueNewTracks);
                 }
             }
             currentAllArtistSongsPage++;
