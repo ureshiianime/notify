@@ -2910,7 +2910,7 @@ audioPlayer.addEventListener('timeupdate', () => {
         }
     }
 
-    if (duration) {
+    if (duration && !isScrubbing) {
         const percent = (current / duration) * 100;
         progressBar.style.width = `${percent}%`;
         miniProgress.style.width = `${percent}%`;
@@ -3029,12 +3029,61 @@ function updateMediaSessionPosition() {
     }
 }
 
-progressContainer.addEventListener('click', (e) => {
+let isScrubbing = false;
+
+function updateScrubbing(e) {
     const rect = progressContainer.getBoundingClientRect();
-    const percent = (e.clientX - rect.left) / rect.width;
-    audioPlayer._pendingResumeTime = 0;
-    audioPlayer.currentTime = percent * audioPlayer.duration;
-    updateMediaSessionPosition();
+    const clientX = e.touches && e.touches.length > 0 ? e.touches[0].clientX : (e.changedTouches && e.changedTouches.length > 0 ? e.changedTouches[0].clientX : e.clientX);
+    let percent = (clientX - rect.left) / rect.width;
+    percent = Math.max(0, Math.min(1, percent));
+    
+    progressBar.style.width = `${percent * 100}%`;
+    miniProgress.style.width = `${percent * 100}%`;
+    
+    let duration = audioPlayer.duration;
+    if (!duration || isNaN(duration)) {
+        const track = currentQueue[currentIndex];
+        duration = track ? (parseInt(track.duration) || Math.floor(track.trackTimeMillis / 1000) || 180) : 180;
+    }
+    currentTimeEl.textContent = formatTime(percent * duration);
+    return { percent, duration };
+}
+
+progressContainer.addEventListener('mousedown', (e) => {
+    isScrubbing = true;
+    updateScrubbing(e);
+});
+progressContainer.addEventListener('touchstart', (e) => {
+    isScrubbing = true;
+    updateScrubbing(e);
+}, {passive: true});
+
+document.addEventListener('mousemove', (e) => {
+    if (!isScrubbing) return;
+    updateScrubbing(e);
+});
+document.addEventListener('touchmove', (e) => {
+    if (!isScrubbing) return;
+    updateScrubbing(e);
+}, {passive: true});
+
+document.addEventListener('mouseup', (e) => {
+    if (isScrubbing) {
+        isScrubbing = false;
+        const { percent, duration } = updateScrubbing(e);
+        audioPlayer._pendingResumeTime = 0;
+        audioPlayer.currentTime = percent * duration;
+        updateMediaSessionPosition();
+    }
+});
+document.addEventListener('touchend', (e) => {
+    if (isScrubbing) {
+        isScrubbing = false;
+        const { percent, duration } = updateScrubbing(e);
+        audioPlayer._pendingResumeTime = 0;
+        audioPlayer.currentTime = percent * duration;
+        updateMediaSessionPosition();
+    }
 });
 
 window.addEventListener('resize', () => {
