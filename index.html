@@ -46,8 +46,8 @@
                     <button id="createNewPlaylistBtn" class="primary-btn" style="display: none; padding: 10px; font-size: 16px; width: 40px; height: 40px; justify-content: center; border-radius: 50%;"><i class="fa-solid fa-plus"></i></button>
                     <!-- Dropdown -->
                     <div id="createPlaylistDropdown" class="dropdown-menu" style="display: none; opacity: 0; position: absolute; top: calc(100% + 8px); right: 0; background: var(--bg-color-soft); border-radius: 12px; box-shadow: 0 15px 35px rgba(0,0,0,0.6); border: 1px solid rgba(255,255,255,0.05); z-index: 1000; min-width: 220px; overflow: hidden; backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); transition: opacity 0.2s, transform 0.2s; transform: translateY(-10px);">
-                        <div class="dropdown-item" id="btnDropdownNew" style="padding: 14px 16px; cursor: pointer; display: flex; align-items: center; gap: 12px; font-size: 14px; font-weight: 500; transition: background 0.2s;"><i class="fa-solid fa-folder-plus" style="width: 16px; color: var(--text-secondary);"></i> Nueva Playlist</div>
-                        <div class="dropdown-item" id="btnDropdownImport" style="padding: 14px 16px; cursor: pointer; display: flex; align-items: center; gap: 12px; font-size: 14px; font-weight: 500; transition: background 0.2s; border-top: 1px solid rgba(255,255,255,0.05);"><i class="fa-solid fa-file-import" style="width: 16px; color: var(--text-secondary);"></i> Importar desde .txt</div>
+                        <div class="dropdown-item" id="btnDropdownNew" style="padding: 14px 16px; cursor: pointer; display: flex; align-items: center; gap: 12px; font-size: 14px; font-weight: 500; transition: background 0.2s;"><i class="fa-solid fa-folder-plus" style="width: 16px; color: var(--text-secondary);"></i> <span data-i18n="dropdown.newPlaylist">Nueva Playlist</span></div>
+                        <div class="dropdown-item" id="btnDropdownImport" style="padding: 14px 16px; cursor: pointer; display: flex; align-items: center; gap: 12px; font-size: 14px; font-weight: 500; transition: background 0.2s; border-top: 1px solid rgba(255,255,255,0.05);"><i class="fa-solid fa-file-import" style="width: 16px; color: var(--text-secondary);"></i> <span data-i18n="dropdown.importTxt">Importar desde .txt</span></div>
                     </div>
                 </div>
             </div>
@@ -59,21 +59,21 @@
         <div id="homeView" class="view-container" style="display: flex;">
             <main class="main-content" id="homeContainer">
                 <div class="home-section">
-                    <h3>Tus Playlists</h3>
+                    <h3 data-i18n="home.title.playlists">Tus Playlists</h3>
                     <div class="horizontal-scroll" id="homeUserPlaylists">
                         <!-- User playlists here -->
                     </div>
                 </div>
                 
                 <div class="home-section">
-                    <h3>Para Ti</h3>
+                    <h3 data-i18n="home.title.foryou">Para Ti</h3>
                     <div class="horizontal-scroll" id="homeMixes">
                         <div class="loading-spinner"><i class="fa-solid fa-circle-notch fa-spin"></i></div>
                     </div>
                 </div>
                 
                 <div class="home-section">
-                    <h3>Música Aleatoria</h3>
+                    <h3 data-i18n="home.title.random">Música Aleatoria</h3>
                     <div class="horizontal-scroll" id="homeRandom">
                         <div class="loading-spinner"><i class="fa-solid fa-circle-notch fa-spin"></i></div>
                     </div>
@@ -86,14 +86,14 @@
             <div class="search-bar-container" style="position: relative;">
                 <div class="search-bar">
                     <i class="fa-solid fa-search"></i>
-                    <input type="text" id="searchInput" placeholder="Buscar canciones, artistas..." autocomplete="off">
+                    <input type="search" id="searchInput" placeholder="Buscar canciones, artistas..." autocomplete="off" data-i18n="search.placeholder">
                 </div>
                 <div id="searchSuggestionsContainer" class="search-suggestions" style="display: none;"></div>
             </div>
             <main class="main-content" id="searchResults">
                 <div class="empty-state">
                     <i class="fa-solid fa-music"></i>
-                    <p>Busca tus canciones favoritas para empezar</p>
+                    <p data-i18n="search.empty">Busca tus canciones favoritas para empezar</p>
                 </div>
             </main>
         </div>
@@ -103,7 +103,7 @@
             <main class="main-content" id="playlistsContainer">
                 <div class="empty-state">
                     <i class="fa-solid fa-list-music"></i>
-                    <p>No tienes playlists. Crea una para empezar.</p>
+                    <p data-i18n="playlists.empty">No tienes playlists. Crea una para empezar.</p>
                 </div>
             </main>
         </div>
@@ -123,7 +123,7 @@
                 <div id="playlistFilterWrapper" style="padding: 0 10px 15px; height: 60px; box-sizing: border-box;">
                     <div class="search-bar" style="background: rgba(255,255,255,0.08);">
                         <i class="fa-solid fa-search"></i>
-                        <input type="text" id="playlistFilterInput" placeholder="Buscar en esta página" autocomplete="off">
+                        <input type="text" id="playlistFilterInput" placeholder="Buscar en esta página" autocomplete="off" data-i18n="playlist.search">
                     </div>
                 </div>
 
@@ -151,7 +151,7 @@
 
                 <div id="playlistSongsContainer">
                     <div class="empty-state">
-                        <p>Esta playlist está vacía</p>
+                        <p data-i18n="playlist.empty">Esta playlist está vacía</p>
                     </div>
                 </div>
             </main>
@@ -188,18 +188,18 @@
                 </div>
 
                 <div style="padding: 0 10px; margin-bottom:15px;">
-                    <h3 style="font-size: 20px; font-weight: 700;">Top canciones</h3>
+                    <h3 style="font-size: 20px; font-weight: 700;" data-i18n="artist.top_songs">Top canciones</h3>
                 </div>
                 <div id="artistSongsContainer">
                     <!-- Populated via JS -->
                 </div>
                 
                 <div id="artistSongsShowAllWrapper" style="display: none; position: relative; margin-top: -60px; height: 120px; background: linear-gradient(to bottom, transparent, var(--bg-color) 80%); align-items: flex-end; justify-content: center; padding-bottom: 20px; z-index: 2;">
-                    <button id="showAllArtistSongsBtn" class="primary-btn" style="background: rgba(255,255,255,0.1); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); color: white; padding: 10px 24px; border-radius: 20px; font-weight: 600; font-size: 14px; box-shadow: 0 4px 15px rgba(0,0,0,0.5);">Mostrar todas</button>
+                    <button id="showAllArtistSongsBtn" class="primary-btn" style="background: rgba(255,255,255,0.1); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); color: white; padding: 10px 24px; border-radius: 20px; font-weight: 600; font-size: 14px; box-shadow: 0 4px 15px rgba(0,0,0,0.5);" data-i18n="artist.show_all">Mostrar todas</button>
                 </div>
 
                 <div style="padding: 10px 10px 15px; margin-top: 10px;">
-                    <h3 style="font-size: 20px; font-weight: 700;">Discografía</h3>
+                    <h3 style="font-size: 20px; font-weight: 700;" data-i18n="artist.discography">Discografía</h3>
                 </div>
                 <div id="artistAlbumsContainer" class="playlists-grid" style="padding: 0 10px;">
                     <!-- Populated via JS -->
@@ -265,7 +265,7 @@
 
                 <div id="albumSongsContainer">
                     <div class="empty-state">
-                        <p>Cargando álbum...</p>
+                        <p data-i18n="album.loading">Cargando álbum...</p>
                     </div>
                 </div>
             </main>
@@ -275,7 +275,7 @@
         <div id="settingsView" class="view-container" style="display: none;">
             <div class="settings-topbar" style="padding: 10px 20px; display: flex; align-items: center; gap: 15px; position: sticky; top: 0; background: var(--bg-color); z-index: 10; min-height: 50px;">
                 <button id="backFromSettingsBtn" class="icon-btn"><i class="fa-solid fa-arrow-left"></i></button>
-                <h3 style="font-size: 18px; font-weight: 700; margin: 0;">Ajustes</h3>
+                <h3 style="font-size: 18px; font-weight: 700; margin: 0;" data-i18n="settings.title">Ajustes</h3>
             </div>
             <main class="main-content" id="settingsMain" style="padding-left: 20px; padding-right: 20px; scroll-behavior: smooth;">
                 
@@ -290,64 +290,85 @@
                         <button id="editProfileNameBtn" class="icon-btn" style="padding: 5px; color: var(--text-secondary);"><i class="fa-solid fa-pen"></i></button>
                     </div>
                     <div id="editProfileNameContainer" style="display: none; align-items: center; justify-content: center; gap: 10px; width: 100%; max-width: 300px;">
-                        <input type="text" id="settingsProfileNameInput" class="custom-input" placeholder="Tu nombre" autocomplete="off" style="flex: 1; min-width: 150px; text-align: center;">
+                        <input type="text" id="settingsProfileNameInput" class="custom-input" placeholder="Tu nombre" autocomplete="off" style="flex: 1; min-width: 150px; text-align: center;" data-i18n="settings.namePlaceholder">
                         <button id="saveProfileNameBtn" class="icon-btn" style="padding: 5px; color: var(--accent-color);"><i class="fa-solid fa-check"></i></button>
                         <button id="cancelProfileNameBtn" class="icon-btn" style="padding: 5px; color: var(--text-secondary);"><i class="fa-solid fa-xmark"></i></button>
                     </div>
                 </div>
 
                 <div class="settings-section" style="margin-bottom: 30px;">
-                    <h3 style="font-size: 16px; font-weight: 700; color: var(--text-secondary); margin-bottom: 10px; text-transform: uppercase; letter-spacing: 1px;">Calidad de Audio</h3>
-                    <div class="settings-card" style="background: var(--surface-color); border-radius: 12px; overflow: hidden;">
+                    <h3 style="font-size: 16px; font-weight: 700; color: var(--text-secondary); margin-bottom: 10px; text-transform: uppercase; letter-spacing: 1px;" data-i18n="settings.audio.title">Calidad de Audio</h3>
+                    <div class="settings-card" style="background: var(--surface-color); border-radius: 12px;">
                         
                         <div class="settings-item" style="display: flex; justify-content: space-between; align-items: center; padding: 15px 20px;">
                             <div class="settings-info" style="flex: 1; padding-right: 15px;">
-                                <h4 style="font-size: 16px; font-weight: 500; margin-bottom: 4px;">Streaming con Datos</h4>
-                                <p style="font-size: 13px; color: var(--text-secondary); line-height: 1.3;">Ajusta la calidad para ahorrar datos móviles.</p>
+                                <h4 style="font-size: 16px; font-weight: 500; margin-bottom: 4px;" data-i18n="settings.audio.data">Streaming con Datos</h4>
+                                <p style="font-size: 13px; color: var(--text-secondary); line-height: 1.3;" data-i18n="settings.audio.dataDesc">Ajusta la calidad para ahorrar datos móviles.</p>
                             </div>
-                            <select id="dataQualitySelect" class="settings-select">
-                                <option value="low">Baja (M4A 96kbps)</option>
-                                <option value="normal" selected>Normal (OPUS 160kbps)</option>
-                                <option value="high">Alta (MP3 320kbps)</option>
-                                <option value="premium">Premium (FLAC/Max)</option>
-                            </select>
+                            <div class="custom-select-wrapper" id="dataQualityWrapper">
+                                <div class="custom-select-trigger" id="dataQualityTrigger">
+                                    <span class="custom-select-value">Normal (OPUS 160kbps)</span>
+                                    <i class="fa-solid fa-chevron-down"></i>
+                                </div>
+                                <div class="custom-select-options" id="dataQualityOptions">
+                                    <div class="custom-option" data-value="low">Baja (M4A 96kbps)</div>
+                                    <div class="custom-option" data-value="normal">Normal (OPUS 160kbps)</div>
+                                    <div class="custom-option" data-value="high">Alta (MP3 320kbps)</div>
+                                    <div class="custom-option" data-value="premium">Premium (FLAC/Max)</div>
+                                </div>
+                            </div>
                         </div>
                         
                         <div style="height: 1px; background: rgba(255,255,255,0.05); margin: 0 20px;"></div>
                         
                         <div class="settings-item" style="display: flex; justify-content: space-between; align-items: center; padding: 15px 20px;">
                             <div class="settings-info" style="flex: 1; padding-right: 15px;">
-                                <h4 style="font-size: 16px; font-weight: 500; margin-bottom: 4px;">Streaming con Wi-Fi</h4>
-                                <p style="font-size: 13px; color: var(--text-secondary); line-height: 1.3;">Recomendado Premium si tienes buena conexión.</p>
+                                <h4 style="font-size: 16px; font-weight: 500; margin-bottom: 4px;" data-i18n="settings.audio.wifi">Streaming con Wi-Fi</h4>
+                                <p style="font-size: 13px; color: var(--text-secondary); line-height: 1.3;" data-i18n="settings.audio.wifiDesc">Recomendado Premium si tienes buena conexión.</p>
                             </div>
-                            <select id="wifiQualitySelect" class="settings-select">
-                                <option value="low">Baja (M4A 96kbps)</option>
-                                <option value="normal">Normal (OPUS 160kbps)</option>
-                                <option value="high">Alta (MP3 320kbps)</option>
-                                <option value="premium" selected>Premium (FLAC/Max)</option>
-                            </select>
+                            <div class="custom-select-wrapper" id="wifiQualityWrapper">
+                                <div class="custom-select-trigger" id="wifiQualityTrigger">
+                                    <span class="custom-select-value">Premium (FLAC/Max)</span>
+                                    <i class="fa-solid fa-chevron-down"></i>
+                                </div>
+                                <div class="custom-select-options" id="wifiQualityOptions">
+                                    <div class="custom-option" data-value="low">Baja (M4A 96kbps)</div>
+                                    <div class="custom-option" data-value="normal">Normal (OPUS 160kbps)</div>
+                                    <div class="custom-option" data-value="high">Alta (MP3 320kbps)</div>
+                                    <div class="custom-option" data-value="premium">Premium (FLAC/Max)</div>
+                                </div>
+                            </div>
                         </div>
 
                     </div>
                 </div>
 
                 <div class="settings-section" style="margin-bottom: 30px;">
-                    <h3 style="font-size: 16px; font-weight: 700; color: var(--text-secondary); margin-bottom: 10px; text-transform: uppercase; letter-spacing: 1px;">Reproducción</h3>
-                    <div class="settings-card" style="background: var(--surface-color); border-radius: 12px; overflow: hidden;">
+                    <h3 style="font-size: 16px; font-weight: 700; color: var(--text-secondary); margin-bottom: 10px; text-transform: uppercase; letter-spacing: 1px;" data-i18n="settings.lang.title">Idioma</h3>
+                    <div class="settings-card" style="background: var(--surface-color); border-radius: 12px;">
                         
                         <div class="settings-item" style="display: flex; justify-content: space-between; align-items: center; padding: 15px 20px;">
                             <div class="settings-info" style="flex: 1; padding-right: 15px;">
-                                <h4 style="font-size: 16px; font-weight: 500; margin-bottom: 4px;">Audio Mono</h4>
-                                <p style="font-size: 13px; color: var(--text-secondary); line-height: 1.3;">Combina los canales izquierdo y derecho del canal estéreo.</p>
+                                <h4 style="font-size: 16px; font-weight: 500; margin-bottom: 4px;" data-i18n="settings.lang.title">Idioma</h4>
+                                <p style="font-size: 13px; color: var(--text-secondary); line-height: 1.3;" data-i18n="settings.lang.label">Elige tu idioma; los cambios se aplicarán automáticamente.</p>
                             </div>
-                            <label class="toggle-switch">
-                                <input type="checkbox" id="monoAudioToggle">
-                                <span class="slider"></span>
-                            </label>
+                            <div class="custom-select-wrapper" id="languageWrapper">
+                                <div class="custom-select-trigger" id="languageTrigger">
+                                    <span class="custom-select-value" data-i18n="settings.lang.es">Español de España</span>
+                                    <i class="fa-solid fa-chevron-down"></i>
+                                </div>
+                                <div class="custom-select-options" id="languageOptions">
+                                    <div class="custom-option" data-value="es" data-i18n="settings.lang.es">Español de España</div>
+                                    <div class="custom-option" data-value="ca" data-i18n="settings.lang.ca">Català</div>
+                                    <div class="custom-option" data-value="en" data-i18n="settings.lang.en">English</div>
+                                </div>
+                            </div>
                         </div>
                         
                     </div>
                 </div>
+
+
 
             </main>
         </div>
@@ -400,14 +421,14 @@
         <div class="modal-overlay" id="addPlaylistModal" style="display: none;">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h3>Añadir a Playlist</h3>
+                    <h3 data-i18n="modal.addPlaylist.title">Añadir a Playlist</h3>
                     <button class="close-modal" id="closePlaylistModal"><i class="fa-solid fa-xmark"></i></button>
                 </div>
                 <div class="modal-body" id="modalPlaylistList">
                     <!-- Playlists rendered here -->
                 </div>
                 <div class="modal-footer">
-                    <button class="create-new-btn" id="createPlaylistBtnModal"><i class="fa-solid fa-plus"></i> Nueva Playlist</button>
+                    <button class="create-new-btn" id="createPlaylistBtnModal"><i class="fa-solid fa-plus"></i> <span data-i18n="modal.addPlaylist.new">Nueva Playlist</span></button>
                 </div>
             </div>
         </div>
@@ -416,22 +437,22 @@
         <div class="modal-overlay" id="createPlaylistModal" style="display: none;">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h3 id="createPlaylistModalTitle">Nueva Playlist</h3>
+                    <h3 id="createPlaylistModalTitle" data-i18n="modal.newPlaylist.title">Nueva Playlist</h3>
                     <button class="close-modal" id="closeCreatePlaylistModal"><i class="fa-solid fa-xmark"></i></button>
                 </div>
                 <div class="modal-body">
-                    <input type="text" id="newPlaylistNameInput" class="custom-input" placeholder="Nombre de tu playlist" autocomplete="off" style="margin-bottom: 10px;">
+                    <input type="text" id="newPlaylistNameInput" class="custom-input" placeholder="Nombre de tu playlist" autocomplete="off" style="margin-bottom: 10px;" data-i18n="modal.newPlaylist.placeholder">
                     
                     <!-- Hidden Import Dropzone -->
                     <div id="importFileContainer" style="display: none; background: rgba(255,255,255,0.05); border: 2px dashed rgba(255,255,255,0.2); border-radius: 8px; padding: 20px; text-align: center; cursor: pointer; transition: all 0.2s;">
                          <i class="fa-solid fa-file-arrow-up" style="font-size: 24px; color: var(--text-secondary); margin-bottom: 10px;"></i>
-                         <p style="margin: 0; font-size: 14px; color: var(--text-primary);">Haz clic para subir archivo .txt</p>
+                         <p style="margin: 0; font-size: 14px; color: var(--text-primary);" data-i18n="modal.newPlaylist.upload">Haz clic para subir archivo .txt</p>
                          <p id="selectedFileNameDisplay" style="margin: 5px 0 0; font-size: 12px; color: var(--accent-color); font-weight: 500;"></p>
                     </div>
                 </div>
                 <div class="modal-footer" style="display: flex; gap: 10px; border-top: none; padding-top: 5px;">
-                    <button class="primary-btn" id="cancelCreatePlaylistBtn" style="flex: 1; background: rgba(255,255,255,0.1); justify-content: center;">Cancelar</button>
-                    <button class="primary-btn" id="confirmCreatePlaylistBtn" style="flex: 1; justify-content: center;">Crear</button>
+                    <button class="primary-btn" id="cancelCreatePlaylistBtn" style="flex: 1; background: rgba(255,255,255,0.1); justify-content: center;" data-i18n="modal.btn.cancel">Cancelar</button>
+                    <button class="primary-btn" id="confirmCreatePlaylistBtn" style="flex: 1; justify-content: center;" data-i18n="modal.btn.create">Crear</button>
                 </div>
             </div>
         </div>
@@ -439,15 +460,15 @@
         <div class="modal-overlay" id="editPlaylistModal" style="display: none;">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h3>Renombrar Playlist</h3>
+                    <h3 data-i18n="modal.editPlaylist.title">Renombrar Playlist</h3>
                     <button class="close-modal" id="closeEditPlaylistModal"><i class="fa-solid fa-xmark"></i></button>
                 </div>
                 <div class="modal-body">
-                    <input type="text" id="editPlaylistNameInput" class="custom-input" placeholder="Nuevo nombre" autocomplete="off">
+                    <input type="text" id="editPlaylistNameInput" class="custom-input" placeholder="Nuevo nombre" autocomplete="off" data-i18n="modal.editPlaylist.placeholder">
                 </div>
                 <div class="modal-footer" style="display: flex; gap: 10px; border-top: none; padding-top: 5px;">
-                    <button class="primary-btn" id="cancelEditPlaylistBtn" style="flex: 1; background: rgba(255,255,255,0.1); justify-content: center;">Cancelar</button>
-                    <button class="primary-btn" id="confirmEditPlaylistBtn" style="flex: 1; justify-content: center;">Guardar</button>
+                    <button class="primary-btn" id="cancelEditPlaylistBtn" style="flex: 1; background: rgba(255,255,255,0.1); justify-content: center;" data-i18n="modal.btn.cancel">Cancelar</button>
+                    <button class="primary-btn" id="confirmEditPlaylistBtn" style="flex: 1; justify-content: center;" data-i18n="modal.btn.save">Guardar</button>
                 </div>
             </div>
         </div>
@@ -455,15 +476,15 @@
         <div class="modal-overlay" id="deleteConfirmModal" style="display: none;">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h3>Eliminar Playlist</h3>
+                    <h3 data-i18n="modal.deletePlaylist.title">Eliminar Playlist</h3>
                     <button class="close-modal" id="closeDeleteConfirmModal"><i class="fa-solid fa-xmark"></i></button>
                 </div>
                 <div class="modal-body">
-                    <p style="color: var(--text-secondary); line-height: 1.5;">¿Estás seguro de que quieres eliminar esta playlist? Esta acción no se puede deshacer.</p>
+                    <p style="color: var(--text-secondary); line-height: 1.5;" data-i18n="modal.deletePlaylist.desc">¿Estás seguro de que quieres eliminar esta playlist? Esta acción no se puede deshacer.</p>
                 </div>
                 <div class="modal-footer" style="display: flex; gap: 10px; border-top: none; padding-top: 10px;">
-                    <button class="primary-btn" id="cancelDeleteBtn" style="flex: 1; background: rgba(255,255,255,0.1); justify-content: center;">Cancelar</button>
-                    <button class="primary-btn" id="confirmDeleteBtn" style="flex: 1; justify-content: center; background: #ff453a;">Eliminar</button>
+                    <button class="primary-btn" id="cancelDeleteBtn" style="flex: 1; background: rgba(255,255,255,0.1); justify-content: center;" data-i18n="modal.btn.cancel">Cancelar</button>
+                    <button class="primary-btn" id="confirmDeleteBtn" style="flex: 1; justify-content: center; background: #ff453a;" data-i18n="modal.btn.delete">Eliminar</button>
                 </div>
             </div>
         </div>
@@ -472,17 +493,17 @@
         <div class="modal-overlay" id="importResultsModal" style="display: none;">
             <div class="modal-content" style="max-height: 80vh; display: flex; flex-direction: column; width: 90%; max-width: 500px;">
                 <div class="modal-header">
-                    <h3 style="display: flex; align-items: center; gap: 8px;"><i class="fa-solid fa-file-circle-check" style="color: var(--accent-color);"></i> Reporte de Importación</h3>
+                    <h3 style="display: flex; align-items: center; gap: 8px;"><i class="fa-solid fa-file-circle-check" style="color: var(--accent-color);"></i> <span data-i18n="modal.import.title">Reporte de Importación</span></h3>
                     <button class="close-modal" id="closeImportResultsModal"><i class="fa-solid fa-xmark"></i></button>
                 </div>
                 <div class="modal-body" style="overflow-y: auto; padding-right: 5px;">
-                    <p style="color: var(--text-secondary); line-height: 1.5; margin-bottom: 15px; font-size: 13px;">Las siguientes canciones importadas no se pudieron completar con calidad premium o faltan en el catálogo global:</p>
+                    <p style="color: var(--text-secondary); line-height: 1.5; margin-bottom: 15px; font-size: 13px;" data-i18n="modal.import.desc">Las siguientes canciones importadas no se pudieron completar con calidad premium o faltan en el catálogo global:</p>
                     <div id="importResultsList" style="display: flex; flex-direction: column; gap: 10px;">
                         <!-- Results injected here -->
                     </div>
                 </div>
                 <div class="modal-footer" style="padding-top: 15px;">
-                    <button class="primary-btn" id="finishImportBtn" style="width: 100%; justify-content: center;">Entendido</button>
+                    <button class="primary-btn" id="finishImportBtn" style="width: 100%; justify-content: center;" data-i18n="modal.btn.understood">Entendido</button>
                 </div>
             </div>
         </div>
@@ -494,20 +515,21 @@
         <nav class="bottom-nav" id="bottomNav">
             <div class="nav-item active" id="tabHome">
                 <i class="fa-solid fa-house"></i>
-                <span>Inicio</span>
+                <span data-i18n="nav.home">Inicio</span>
             </div>
             <div class="nav-item" id="tabSearch">
                 <i class="fa-solid fa-magnifying-glass"></i>
-                <span>Buscar</span>
+                <span data-i18n="nav.search">Buscar</span>
             </div>
             <div class="nav-item" id="tabPlaylists">
                 <i class="fa-solid fa-book-open"></i>
-                <span>Tu Biblioteca</span>
+                <span data-i18n="nav.library">Tu Biblioteca</span>
             </div>
         </nav>
     </div>
     
     <audio id="audioPlayer"></audio>
+    <script src="i18n.js"></script>
     <script src="script.js"></script>
 </body>
 </html>

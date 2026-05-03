@@ -999,10 +999,11 @@ img {
 
 /* Settings UI Element Styles */
 .settings-select {
-    background: rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.1) url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>') no-repeat right 12px center;
+    background-size: 14px;
     border: 1px solid rgba(255, 255, 255, 0.2);
     color: white;
-    padding: 8px 12px;
+    padding: 8px 32px 8px 12px;
     border-radius: 8px;
     font-size: 14px;
     outline: none;
@@ -1147,4 +1148,115 @@ img {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+
+/* Custom Dropdown Styling */
+.custom-select-wrapper {
+    position: relative;
+    user-select: none;
+    min-width: 170px;
+}
+.custom-select-trigger {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    padding: 8px 12px;
+    border-radius: 8px;
+    font-size: 14px;
+    color: white;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-weight: 500;
+}
+.custom-select-trigger:hover {
+    background: rgba(255, 255, 255, 0.15);
+}
+.custom-select-trigger i {
+    font-size: 12px;
+    transition: transform 0.2s;
+    margin-left: 10px;
+}
+.custom-select-wrapper.open .custom-select-trigger i {
+    transform: rotate(180deg);
+}
+.custom-select-wrapper.open .custom-select-trigger {
+    border-color: var(--accent-color);
+}
+.custom-select-options {
+    position: absolute;
+    top: calc(100% + 5px);
+    right: 0;
+    left: 0;
+    background: var(--bg-color-soft);
+    border-radius: 12px;
+    box-shadow: 0 15px 35px rgba(0,0,0,0.6);
+    border: 1px solid rgba(255,255,255,0.05);
+    z-index: 1000;
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(-10px);
+    transition: all 0.2s;
+    overflow: hidden;
+}
+.custom-select-wrapper.open .custom-select-options {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+}
+.custom-option {
+    padding: 12px 16px;
+    font-size: 14px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+.custom-option:hover {
+    background: rgba(255,255,255,0.1);
+}
+.custom-option.selected {
+    color: var(--accent-color);
+    background: rgba(255,255,255,0.05);
+}
+
+/* Swipe to Action Styles */
+.song-swipe-bg {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 25px;
+    color: white;
+    font-size: 20px;
+    box-sizing: border-box;
+    transition: background-color 0.2s, opacity 0.2s;
+    opacity: 0.9;
+    cursor: pointer;
+}
+
+.song-swipe-bg.add {
+    background-color: #34c759;
+}
+.song-swipe-bg.remove {
+    background-color: #e53935;
+}
+.song-swipe-bg.blue {
+    background-color: #6c7cf6;
+}
+.song-swipe-bg.orange {
+    background-color: #f7a049;
+}
+
+.song-swipe-bg.auto-trigger {
+    opacity: 1;
+    /* Optional: scale up icon when ready to auto-trigger */
+}
+.song-swipe-bg.auto-trigger i {
+    transform: scale(1.2);
+    transition: transform 0.2s;
+}
+
+.song-swipe-bg i {
+    transition: transform 0.2s;
 }
