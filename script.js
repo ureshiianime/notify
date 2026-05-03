@@ -3691,8 +3691,10 @@ function checkPausedImports() {
 // --- Swipe to Action Logic for Mobile ---
 (function() {
     let startX = 0;
+    let startY = 0;
     let currentX = 0;
     let isSwiping = false;
+    let isHorizontalSwipe = null;
     let swipedItem = null;
     let swipeBg = null;
     let swipeRightContainer = null;
@@ -3704,6 +3706,9 @@ function checkPausedImports() {
         if (e.touches.length > 1) return;
         
         if (swipedItem && !e.target.closest('.song-item')) {
+            if (e.target.closest('.song-swipe-bg')) {
+                return;
+            }
             resetSwipe();
         }
 
@@ -3715,8 +3720,10 @@ function checkPausedImports() {
         }
 
         startX = e.touches[0].clientX;
+        startY = e.touches[0].clientY;
         currentX = startX;
         isSwiping = true;
+        isHorizontalSwipe = null;
 
         if (item !== swipedItem) {
             resetSwipe();
@@ -3795,13 +3802,29 @@ function checkPausedImports() {
         if (!isSwiping || !swipedItem) return;
         
         currentX = e.touches[0].clientX;
+        const currentY = e.touches[0].clientY;
         const deltaX = currentX - startX;
+        const deltaY = currentY - startY;
+
+        if (isHorizontalSwipe === null) {
+            if (Math.abs(deltaX) > 5 || Math.abs(deltaY) > 5) {
+                isHorizontalSwipe = Math.abs(deltaX) > Math.abs(deltaY);
+            }
+        }
+
+        if (isHorizontalSwipe === false) {
+            resetSwipe();
+            return;
+        }
+
+        if (isHorizontalSwipe === true) {
+            if (e.cancelable) e.preventDefault();
+        }
 
         if (deltaX < 0) {
             if(swipeRightContainer) swipeRightContainer.style.display = 'none';
             if(swipeBg) swipeBg.style.display = 'flex';
             
-            if (Math.abs(deltaX) > 10 && e.cancelable) e.preventDefault();
             const moveX = Math.max(deltaX, -200); 
             swipedItem.style.transform = `translateX(${moveX}px)`;
             
@@ -3819,7 +3842,6 @@ function checkPausedImports() {
             if(swipeBg) swipeBg.style.display = 'none';
             if(swipeRightContainer) swipeRightContainer.style.display = 'flex';
             
-            if (Math.abs(deltaX) > 10 && e.cancelable) e.preventDefault();
             const moveX = Math.min(deltaX, 200); 
             swipedItem.style.transform = `translateX(${moveX}px)`;
             
@@ -3990,7 +4012,7 @@ function addTrackToQueueNext(track) {
     } else {
         currentQueue.splice(currentIndex + 1, 0, track);
     }
-    showToast(getI18n('toast.addedToQueue') || 'Añadido a la cola', 'fa-plus');
+    showToast(getI18n('toast.addedToQueueNext') || 'Se reproducirá a continuación', 'fa-play');
 }
 
 function addTrackToQueueEnd(track) {

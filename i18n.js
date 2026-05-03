@@ -55,7 +55,8 @@ const translations = {
         "search.loading": "Buscando canciones completas...",
         "search.suggestion.song": "Canción",
         "search.suggestion.artist": "Artista",
-        "toast.addedToQueue": "Añadido a la cola"
+        "toast.addedToQueue": "Añadido a la cola",
+        "toast.addedToQueueNext": "Se reproducirá a continuación"
     },
     ca: {
         "nav.home": "Inici",
@@ -113,7 +114,8 @@ const translations = {
         "search.loading": "Cercant cançons completes...",
         "search.suggestion.song": "Cançó",
         "search.suggestion.artist": "Artista",
-        "toast.addedToQueue": "Afegit a la cua"
+        "toast.addedToQueue": "Afegit a la cua",
+        "toast.addedToQueueNext": "Es reproduirà a continuació"
     },
     en: {
         "nav.home": "Home",
@@ -171,7 +173,8 @@ const translations = {
         "search.loading": "Searching for full songs...",
         "search.suggestion.song": "Song",
         "search.suggestion.artist": "Artist",
-        "toast.addedToQueue": "Added to queue"
+        "toast.addedToQueue": "Added to queue",
+        "toast.addedToQueueNext": "Playing next"
     }
 };
 
