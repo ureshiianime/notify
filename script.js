@@ -2502,6 +2502,11 @@ async function playTrack(index, queueArray = null, autoPlay = true, resumeTime =
     miniArtist.innerHTML = formatArtistLinks(artistNameStr, artistIdStr, true);
 
     fullCover.src = highQualityArtwork;
+    
+    // Extract color and update background
+    extractDominantColor(highQualityArtwork).then(color => {
+        document.documentElement.style.setProperty('--player-bg-color', color);
+    });
     fullTitle.textContent = trackName;
     fullArtist.innerHTML = formatArtistLinks(artistNameStr, artistIdStr, true);
 
@@ -3659,8 +3664,112 @@ document.addEventListener('click', () => {
     document.querySelectorAll('.custom-select-wrapper').forEach(w => w.classList.remove('open'));
 });
 
-// Load settings on boot
-loadUserProfileUI();
+// --- Player Background Color Extraction ---
+function extractDominantColor(imgUrl) {
+    return new Promise((resolve) => {
+        const img = new Image();
+        img.crossOrigin = "Anonymous";
+        img.onload = () => {
+            try {
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                canvas.width = 50;
+                canvas.height = 50;
+                ctx.drawImage(img, 0, 0, 50, 50);
+                const data = ctx.getImageData(0, 0, 50, 50).data;
+                let r = 0, g = 0, b = 0;
+                let count = 0;
+                for (let i = 0; i < data.length; i += 4) {
+                    // Skip transparent/white/black pixels to get better color
+                    if (data[i+3] < 255) continue; 
+                    r += data[i];
+                    g += data[i+1];
+                    b += data[i+2];
+                    count++;
+                }
+                count = Math.max(1, count);
+                // Apple Music makes the background quite dark and saturated
+                r = Math.floor((r / count) * 0.4);
+                g = Math.floor((g / count) * 0.4);
+                b = Math.floor((b / count) * 0.4);
+                
+                // Ensure it's not too bright, but keeps the hue
+                resolve(`rgb(${r}, ${g}, ${b})`);
+            } catch (e) {
+                resolve('#0f0f13');
+            }
+        };
+        img.onerror = () => {
+            resolve('#0f0f13');
+        };
+        img.src = imgUrl;
+    });
+}
+
+// --- Queue View Logic ---
+const queueBtn = document.getElementById('queueBtn');
+const closeQueueBtn = document.getElementById('closeQueueBtn');
+const queueOverlay = document.getElementById('queueOverlay');
+const queueListContainer = document.getElementById('queueListContainer');
+
+queueBtn.addEventListener('click', () => {
+    renderQueueList();
+    queueOverlay.style.visibility = 'visible';
+    queueOverlay.style.transform = 'translateY(0)';
+});
+
+closeQueueBtn.addEventListener('click', () => {
+    queueOverlay.style.transform = 'translateY(100%)';
+    setTimeout(() => {
+        queueOverlay.style.visibility = 'hidden';
+    }, 400);
+});
+
+function renderQueueList() {
+    queueListContainer.innerHTML = '';
+    if (!currentQueue || currentQueue.length === 0) {
+        queueListContainer.innerHTML = '<p style="color: var(--text-secondary); text-align: center; margin-top: 20px;">La cola está vacía</p>';
+        return;
+    }
+    
+    currentQueue.forEach((track, index) => {
+        const item = document.createElement('div');
+        item.style.display = 'flex';
+        item.style.alignItems = 'center';
+        item.style.padding = '10px 15px';
+        item.style.background = index === currentIndex ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.03)';
+        item.style.borderRadius = '12px';
+        item.style.cursor = 'pointer';
+        
+        const artworkObj = track.image.find(img => img.quality && img.quality.includes('150')) || track.image[0];
+        const smallArtworkUrl = artworkObj ? (artworkObj.url || artworkObj.link) : 'https://via.placeholder.com/150';
+        
+        item.innerHTML = `
+            <img src="${smallArtworkUrl}" style="width: 44px; height: 44px; border-radius: 6px; margin-right: 12px; object-fit: cover;">
+            <div style="flex: 1; overflow: hidden;">
+                <h4 style="margin: 0 0 2px 0; font-size: 15px; font-weight: 600; color: ${index === currentIndex ? 'var(--accent-color)' : 'var(--text-primary)'}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${decodeHTML(track.name || track.title)}</h4>
+                <p style="margin: 0; font-size: 13px; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${decodeHTML(track.primaryArtists || track.singers || 'Artista desconocido')}</p>
+            </div>
+            ${index === currentIndex ? '<i class="fa-solid fa-volume-high" style="color: var(--accent-color); font-size: 14px; margin-left: 10px;"></i>' : ''}
+        `;
+        
+        item.addEventListener('click', () => {
+            playTrack(index);
+            // Re-render to update the playing state indicator
+            renderQueueList();
+        });
+        
+        queueListContainer.appendChild(item);
+    });
+    
+    // Auto-scroll to current playing item
+    setTimeout(() => {
+        const activeItem = queueListContainer.children[currentIndex];
+        if (activeItem) {
+            activeItem.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+    }, 100);
+}
 if (typeof applyLanguage === 'function') applyLanguage();
 
 // Initial View Load
