@@ -3606,8 +3606,21 @@ document.querySelectorAll('.custom-select-wrapper').forEach(wrapper => {
         e.stopPropagation();
         // Close others
         document.querySelectorAll('.custom-select-wrapper').forEach(w => {
-            if (w !== wrapper) w.classList.remove('open');
+            if (w !== wrapper) {
+                w.classList.remove('open');
+                w.classList.remove('open-upwards');
+            }
         });
+        
+        const rect = trigger.getBoundingClientRect();
+        const spaceBelow = window.innerHeight - rect.bottom;
+        
+        if (spaceBelow < 200) {
+            wrapper.classList.add('open-upwards');
+        } else {
+            wrapper.classList.remove('open-upwards');
+        }
+
         wrapper.classList.toggle('open');
     });
 
