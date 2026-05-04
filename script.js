@@ -3056,7 +3056,10 @@ progressContainer.addEventListener('mousedown', (e) => {
 progressContainer.addEventListener('touchstart', (e) => {
     isScrubbing = true;
     updateScrubbing(e);
-}, {passive: true});
+    if (e.cancelable) {
+        e.preventDefault();
+    }
+}, {passive: false});
 
 document.addEventListener('mousemove', (e) => {
     if (!isScrubbing) return;
@@ -3065,7 +3068,10 @@ document.addEventListener('mousemove', (e) => {
 document.addEventListener('touchmove', (e) => {
     if (!isScrubbing) return;
     updateScrubbing(e);
-}, {passive: true});
+    if (e.cancelable) {
+        e.preventDefault();
+    }
+}, {passive: false});
 
 document.addEventListener('mouseup', (e) => {
     if (isScrubbing) {
@@ -3083,6 +3089,12 @@ document.addEventListener('touchend', (e) => {
         audioPlayer._pendingResumeTime = 0;
         audioPlayer.currentTime = percent * duration;
         updateMediaSessionPosition();
+    }
+});
+
+document.addEventListener('touchcancel', (e) => {
+    if (isScrubbing) {
+        isScrubbing = false;
     }
 });
 
