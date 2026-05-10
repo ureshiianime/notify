@@ -2503,14 +2503,12 @@ async function playTrack(index, queueArray = null, autoPlay = true, resumeTime =
 
     fullCover.src = highQualityArtwork;
     
-    // Extract color and update background
-    extractDominantColor(highQualityArtwork).then(color => {
-        document.documentElement.style.setProperty('--player-bg-color', color);
-        const themeColorMeta = document.querySelector('meta[name="theme-color"]');
-        if (themeColorMeta) {
-            themeColorMeta.setAttribute('content', color);
-        }
-    });
+    // Update ambient background image
+    const fullPlayerBg = document.getElementById('fullPlayerBg');
+    if (fullPlayerBg) {
+        fullPlayerBg.style.backgroundImage = `url(${highQualityArtwork})`;
+    }
+    
     fullTitle.textContent = trackName;
     fullArtist.innerHTML = formatArtistLinks(artistNameStr, artistIdStr, true);
 
