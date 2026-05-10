@@ -2506,6 +2506,10 @@ async function playTrack(index, queueArray = null, autoPlay = true, resumeTime =
     // Extract color and update background
     extractDominantColor(highQualityArtwork).then(color => {
         document.documentElement.style.setProperty('--player-bg-color', color);
+        const themeColorMeta = document.querySelector('meta[name="theme-color"]');
+        if (themeColorMeta) {
+            themeColorMeta.setAttribute('content', color);
+        }
     });
     fullTitle.textContent = trackName;
     fullArtist.innerHTML = formatArtistLinks(artistNameStr, artistIdStr, true);
@@ -2766,10 +2770,19 @@ prevBtn.addEventListener('click', playPrev);
 
 openPlayerBtn.addEventListener('click', () => {
     fullPlayer.classList.add('active');
+    const themeColorMeta = document.querySelector('meta[name="theme-color"]');
+    const playerBg = getComputedStyle(document.documentElement).getPropertyValue('--player-bg-color').trim();
+    if (themeColorMeta && playerBg) {
+        themeColorMeta.setAttribute('content', playerBg);
+    }
 });
 
 closePlayerBtn.addEventListener('click', () => {
     fullPlayer.classList.remove('active');
+    const themeColorMeta = document.querySelector('meta[name="theme-color"]');
+    if (themeColorMeta) {
+        themeColorMeta.setAttribute('content', '#0f0f13');
+    }
 });
 
 // Swipe/Scroll on Mini Player to change songs
